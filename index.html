@@ -14,24 +14,1051 @@
         html, body {
             height: 100%;
             width: 100%;
+            overflow: hidden;
+            background-color: black;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            transition: background 0.6s ease;
+            user-select: none;
+            -webkit-user-select: none;
         }
         body {
             display: flex;
             justify-content: center;
             align-items: center;
-            background-color: black;
+            position: relative;
         }
-        img {
-            max-width: 100%;
-            max-height: 100%;
-            width: auto;
-            height: auto;
-            border: 1px solid darkgrey;
+
+        /* Party Mode Background Animation */
+        body.party-mode {
+            animation: discoBg 2.5s infinite alternate ease-in-out;
+        }
+        @keyframes discoBg {
+            0%   { background-color: #1a0826; }
+            25%  { background-color: #0d1e38; }
+            50%  { background-color: #062b1b; }
+            75%  { background-color: #381f08; }
+            100% { background-color: #33081a; }
+        }
+
+        /* Photo Stage & Container */
+        .stage {
+            position: relative;
+            max-width: 100vw;
+            max-height: 100vh;
+            aspect-ratio: 1287 / 1512;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .main-photo {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            height: 100%;
             object-fit: contain;
+            border: 1px solid darkgrey;
+            display: block;
+            pointer-events: auto;
+            transition: transform 0.12s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            -webkit-user-drag: none;
+        }
+
+        .main-photo.boop-squish {
+            transform: scale(0.975);
+        }
+
+        /* Nose Boop Hotspot */
+        .snoot-hotspot {
+            position: absolute;
+            left: 44.5%;
+            top: 29.5%;
+            width: 19%;
+            height: 11.5%;
+            border-radius: 45% 45% 55% 55%;
+            cursor: pointer;
+            z-index: 20;
+            background: transparent;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Realistic Eyeball Sockets Behind Photo (Active by Default) */
+        .eyeball-socket {
+            position: absolute;
+            z-index: 5;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none;
+            box-shadow: inset 0 5px 7px rgba(0, 0, 0, 0.85), inset 0 -2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        #socket-left {
+            left: 40.5%;
+            top: 20.8%;
+            width: 8.0%;
+            height: 4.0%;
+            border-radius: 50% 50% 45% 45% / 60% 60% 40% 40%;
+            transform: rotate(2deg);
+            background: radial-gradient(ellipse at 50% 60%, #685350 0%, #503e3c 60%, #302221 100%);
+        }
+
+        #socket-right {
+            left: 65.0%;
+            top: 21.8%;
+            width: 8.0%;
+            height: 4.0%;
+            border-radius: 50% 50% 45% 45% / 60% 60% 40% 40%;
+            transform: rotate(1deg);
+            background: radial-gradient(ellipse at 50% 60%, #7c6460 0%, #5e4a47 60%, #382827 100%);
+        }
+
+        .eyeball-socket .iris {
+            position: absolute;
+            width: 53%;
+            aspect-ratio: 1;
+            border-radius: 50%;
+            background: radial-gradient(circle at 45% 42%, #38362b 0%, #2b2b20 28%, #1f1e16 58%, #13120d 84%, #060504 100%);
+            box-shadow: 0 0 3px rgba(0,0,0,0.9), inset 0 0 2px rgba(0,0,0,0.95);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            will-change: transform;
+            transition: transform 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .stage.tracking-active .eyeball-socket .iris {
+            transition: transform 0.04s ease-out;
+        }
+
+        .eyeball-socket .pupil {
+            position: relative;
+            width: 44%;
+            height: 44%;
+            background: #030303;
+            border-radius: 50%;
+            box-shadow: inset 0 0 2px rgba(0,0,0,1);
+        }
+
+        .eyeball-socket .glint-primary {
+            position: absolute;
+            width: 24%;
+            height: 24%;
+            background: rgba(240, 235, 225, 0.65);
+            border-radius: 50%;
+            top: 16%;
+            left: 18%;
+            filter: drop-shadow(0 0 1px rgba(255,255,255,0.4));
+        }
+
+        .eyeball-socket .glint-secondary {
+            position: absolute;
+            width: 14%;
+            height: 14%;
+            background: rgba(230, 220, 210, 0.35);
+            border-radius: 50%;
+            bottom: 22%;
+            right: 22%;
+        }
+
+        /* Googly Eyes Layer (Alternative Fun Mode) */
+        .googly-eye {
+            position: absolute;
+            width: 9.6%;
+            aspect-ratio: 1;
+            background: #ffffff;
+            border-radius: 50%;
+            border: 2.5px solid #111111;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.35), 0 4px 10px rgba(0,0,0,0.6);
+            z-index: 25;
+            display: none;
+            overflow: hidden;
+            pointer-events: none;
+            transform-origin: center center;
+        }
+
+        .googly-eye.active {
+            display: block;
+            animation: eyePopIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.4);
+        }
+
+        #eye-left {
+            left: 39.6%;
+            top: 18.7%;
+            transform: rotate(2deg);
+        }
+
+        #eye-right {
+            left: 64.2%;
+            top: 19.8%;
+            transform: rotate(1deg);
+        }
+
+        .eye-pupil {
+            position: absolute;
+            width: 56%;
+            height: 56%;
+            background: #111111;
+            border-radius: 50%;
+            top: 22%;
+            left: 22%;
+            box-shadow: inset 1px 1px 2px rgba(255,255,255,0.25);
+            transition: transform 0.04s ease-out;
+        }
+
+        .eye-glint {
+            position: absolute;
+            width: 28%;
+            height: 28%;
+            background: rgba(255,255,255,0.9);
+            border-radius: 50%;
+            top: 15%;
+            right: 18%;
+        }
+
+        @keyframes eyePopIn {
+            0%   { transform: scale(0) rotate(-45deg); opacity: 0; }
+            80%  { transform: scale(1.15) rotate(10deg); opacity: 1; }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+
+        /* Sunglasses Layer (Deal With It) */
+        .sunglasses-container {
+            position: absolute;
+            top: 18.5%;
+            left: 32.7%;
+            width: 48%;
+            z-index: 30;
+            pointer-events: none;
+            display: none;
+            transform-origin: center center;
+        }
+
+        .sunglasses-container.active {
+            display: block;
+            animation: dropShades 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+
+        .sunglasses-svg {
+            width: 100%;
+            height: auto;
+            filter: drop-shadow(0 8px 16px rgba(0,0,0,0.8));
+        }
+
+        @keyframes dropShades {
+            0% {
+                transform: translateY(-800%) rotate(-18deg);
+                opacity: 0;
+            }
+            60% {
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(0) rotate(-2.5deg);
+                opacity: 1;
+            }
+        }
+
+        /* Floating Particle Emojis */
+        .floating-particle {
+            position: fixed;
+            pointer-events: none;
+            z-index: 100;
+            font-size: 2rem;
+            will-change: transform, opacity;
+            animation: floatUpAndFade 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+        }
+
+        @keyframes floatUpAndFade {
+            0% {
+                transform: translate(0, 0) scale(0.6) rotate(0deg);
+                opacity: 1;
+            }
+            50% {
+                transform: translate(var(--dx), calc(var(--dy) * 0.6)) scale(1.3) rotate(var(--rot));
+                opacity: 0.9;
+            }
+            100% {
+                transform: translate(calc(var(--dx) * 1.5), var(--dy)) scale(0.9) rotate(calc(var(--rot) * 2));
+                opacity: 0;
+            }
+        }
+
+        /* Boop Floating Badge Text */
+        .boop-badge {
+            position: fixed;
+            pointer-events: none;
+            z-index: 101;
+            font-weight: 900;
+            font-size: 1.15rem;
+            color: #ffeb3b;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8), 0 0 10px rgba(255, 235, 59, 0.6);
+            letter-spacing: 1px;
+            animation: badgeFloat 1s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+        }
+
+        @keyframes badgeFloat {
+            0% {
+                transform: translate(-50%, 0) scale(0.5);
+                opacity: 0;
+            }
+            25% {
+                transform: translate(-50%, -20px) scale(1.15);
+                opacity: 1;
+            }
+            100% {
+                transform: translate(-50%, -60px) scale(0.95);
+                opacity: 0;
+            }
+        }
+
+        /* Party Mode Banner */
+        .party-banner {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            color: #fff;
+            border: 2px solid #ff007f;
+            box-shadow: 0 0 20px rgba(255, 0, 127, 0.5), inset 0 0 10px rgba(0, 240, 255, 0.3);
+            padding: 10px 24px;
+            border-radius: 30px;
+            font-weight: bold;
+            font-size: 0.95rem;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            z-index: 200;
+            display: none;
+            text-align: center;
+            animation: pulseGlow 1.5s infinite alternate;
+        }
+
+        .party-banner.active {
+            display: block;
+        }
+
+        @keyframes pulseGlow {
+            0% { box-shadow: 0 0 12px rgba(255, 0, 127, 0.4); }
+            100% { box-shadow: 0 0 26px rgba(0, 240, 255, 0.8); }
+        }
+
+        /* Fullscreen Canvas for Confetti */
+        #fx-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 90;
         }
     </style>
 </head>
 <body>
-    <img src="henrybeard.jpg" alt="Henry Beard">
+
+    <canvas id="fx-canvas"></canvas>
+
+    <div class="stage" id="stage">
+        <!-- Realistic Eyeball Layer (Behind the Photo) -->
+        <div class="eyeball-socket" id="socket-left">
+            <div class="iris" id="iris-left">
+                <div class="pupil">
+                    <div class="glint-primary"></div>
+                    <div class="glint-secondary"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="eyeball-socket" id="socket-right">
+            <div class="iris" id="iris-right">
+                <div class="pupil">
+                    <div class="glint-primary"></div>
+                    <div class="glint-secondary"></div>
+                </div>
+            </div>
+        </div>
+
+        <img src="henrybeard.png" alt="Henry Beard" class="main-photo" id="photo" draggable="false">
+
+        <!-- Interactive Hotspot over Henry's nose -->
+        <div class="snoot-hotspot" id="snoot" title="Boop!"></div>
+
+        <!-- Googly Eyes Overlay -->
+        <div class="googly-eye" id="eye-left">
+            <div class="eye-pupil" id="pupil-left">
+                <div class="eye-glint"></div>
+            </div>
+        </div>
+        <div class="googly-eye" id="eye-right">
+            <div class="eye-pupil" id="pupil-right">
+                <div class="eye-glint"></div>
+            </div>
+        </div>
+
+        <!-- 8-Bit Pixel "Deal With It" Sunglasses (Human) -->
+        <div class="sunglasses-container" id="sunglasses">
+            <svg viewBox="0 0 100 24" class="sunglasses-svg" shape-rendering="crispEdges">
+                <!-- Frame -->
+                <path fill="#000000" d="
+                    M 2,2  h 42 v 16 h -8 v 4 h -26 v -4 h -8 z
+                    M 44,2 h 12 v 4  h -12 z
+                    M 56,2 h 42 v 16 h -8 v 4 h -26 v -4 h -8 z
+                "/>
+                <!-- White Glint Pixels Left Lens -->
+                <rect x="8"  y="4" width="4" height="4" fill="#ffffff" />
+                <rect x="12" y="8" width="4" height="4" fill="#ffffff" />
+                <rect x="16" y="12" width="4" height="4" fill="#ffffff" />
+                <!-- White Glint Pixels Right Lens -->
+                <rect x="62" y="4" width="4" height="4" fill="#ffffff" />
+                <rect x="66" y="8" width="4" height="4" fill="#ffffff" />
+                <rect x="70" y="12" width="4" height="4" fill="#ffffff" />
+            </svg>
+        </div>
+    </div>
+
+    <!-- Party Banner -->
+    <div class="party-banner" id="party-banner">
+        🎉 DEAL WITH IT • PARTY MODE 🎉
+    </div>
+
+    <script>
+        (function() {
+            /* -------------------------------------------------------------
+               1. AUDIO ENGINE (Web Audio API Synthesizer - Zero Dependencies)
+               ------------------------------------------------------------- */
+            let audioCtx = null;
+
+            function getAudioContext() {
+                if (!audioCtx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContext) {
+                        audioCtx = new AudioContext();
+                    }
+                }
+                if (audioCtx && audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                return audioCtx;
+            }
+
+            // Squeak / Boop Sound
+            function playBoopSound(pitchMod = 1) {
+                const ctx = getAudioContext();
+                if (!ctx) return;
+
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                const now = ctx.currentTime;
+
+                const baseFreq = 540 * pitchMod;
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(baseFreq, now);
+                osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.6, now + 0.06);
+                osc.frequency.exponentialRampToValueAtTime(baseFreq * 0.8, now + 0.15);
+
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.17);
+            }
+
+            // Dog Woof / Bark Sound
+            function playBarkSound() {
+                const ctx = getAudioContext();
+                if (!ctx) return;
+
+                const now = ctx.currentTime;
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                const filter = ctx.createBiquadFilter();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(320, now);
+                osc.frequency.exponentialRampToValueAtTime(110, now + 0.22);
+
+                filter.type = 'bandpass';
+                filter.frequency.setValueAtTime(450, now);
+                filter.Q.setValueAtTime(3, now);
+
+                gain.gain.setValueAtTime(0.001, now);
+                gain.gain.linearRampToValueAtTime(0.45, now + 0.03);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+                osc.connect(filter);
+                filter.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.26);
+            }
+
+            // 8-Bit Party Fanfare Chime
+            function playPartyFanfare() {
+                const ctx = getAudioContext();
+                if (!ctx) return;
+
+                const notes = [
+                    { f: 523.25, d: 0.08 }, // C5
+                    { f: 659.25, d: 0.08 }, // E5
+                    { f: 783.99, d: 0.08 }, // G5
+                    { f: 1046.50, d: 0.24 } // C6
+                ];
+
+                let time = ctx.currentTime;
+                notes.forEach(n => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(n.f, time);
+
+                    gain.gain.setValueAtTime(0.12, time);
+                    gain.gain.exponentialRampToValueAtTime(0.001, time + n.d);
+
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+
+                    osc.start(time);
+                    osc.stop(time + n.d + 0.02);
+                    time += n.d * 0.9;
+                });
+            }
+
+            // Googly Wobble Sound
+            function playGooglySound() {
+                const ctx = getAudioContext();
+                if (!ctx) return;
+
+                const now = ctx.currentTime;
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(240, now);
+                osc.frequency.linearRampToValueAtTime(600, now + 0.09);
+                osc.frequency.linearRampToValueAtTime(320, now + 0.18);
+                osc.frequency.linearRampToValueAtTime(700, now + 0.26);
+
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.32);
+            }
+
+
+            /* -------------------------------------------------------------
+               2. BOOP & PARTICLE SYSTEM (Easter Egg 1)
+               ------------------------------------------------------------- */
+            let boopCount = 0;
+            const photoEl = document.getElementById('photo');
+            const snootEl = document.getElementById('snoot');
+            const stageEl = document.getElementById('stage');
+
+            const boopPhrases = [
+                "BOOP! 🐶",
+                "SNOOT BOOPED! ✨",
+                "10/10 GOOD BOY 🦴",
+                "SUCH BEARD! ❤️",
+                "WOOF! 🐾",
+                "HENRY APPROVED 👍",
+                "MEGA BOOP! ⚡",
+                "BOOP × "
+            ];
+            const particleIcons = ["🐾", "❤️", "🦴", "✨", "🐶", "🍖", "💖", "⭐"];
+
+            function spawnParticles(x, y, count = 7) {
+                for (let i = 0; i < count; i++) {
+                    const particle = document.createElement('div');
+                    particle.className = 'floating-particle';
+                    particle.textContent = particleIcons[Math.floor(Math.random() * particleIcons.length)];
+
+                    const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.5;
+                    const distance = 60 + Math.random() * 80;
+                    const dx = Math.cos(angle) * distance;
+                    const dy = -Math.abs(Math.sin(angle) * distance) - 40;
+                    const rot = (Math.random() - 0.5) * 90 + 'deg';
+
+                    particle.style.left = `${x}px`;
+                    particle.style.top = `${y}px`;
+                    particle.style.setProperty('--dx', `${dx}px`);
+                    particle.style.setProperty('--dy', `${dy}px`);
+                    particle.style.setProperty('--rot', rot);
+
+                    document.body.appendChild(particle);
+                    setTimeout(() => particle.remove(), 1200);
+                }
+            }
+
+            function spawnBoopBadge(x, y, text) {
+                const badge = document.createElement('div');
+                badge.className = 'boop-badge';
+                badge.textContent = text;
+                badge.style.left = `${x}px`;
+                badge.style.top = `${y}px`;
+                document.body.appendChild(badge);
+                setTimeout(() => badge.remove(), 1000);
+            }
+
+            function triggerBoop(e) {
+                boopCount++;
+                const pitch = 0.85 + Math.random() * 0.4;
+                playBoopSound(pitch);
+
+                photoEl.classList.remove('boop-squish');
+                // Force reflow
+                void photoEl.offsetWidth;
+                photoEl.classList.add('boop-squish');
+                setTimeout(() => photoEl.classList.remove('boop-squish'), 140);
+
+                let x, y;
+                if (e && e.clientX && e.clientY) {
+                    x = e.clientX;
+                    y = e.clientY;
+                } else {
+                    const rect = snootEl.getBoundingClientRect();
+                    x = rect.left + rect.width / 2;
+                    y = rect.top + rect.height / 2;
+                }
+
+                spawnParticles(x, y, 8);
+
+                let phrase;
+                if (boopCount % 10 === 0) {
+                    phrase = `🔥 COMBO × ${boopCount}! 🔥`;
+                } else if (boopCount > 5 && Math.random() > 0.6) {
+                    phrase = `BOOP × ${boopCount}`;
+                } else {
+                    phrase = boopPhrases[Math.floor(Math.random() * (boopPhrases.length - 1))];
+                }
+                spawnBoopBadge(x, y - 20, phrase);
+            }
+
+            snootEl.addEventListener('click', (e) => {
+                e.stopPropagation();
+                triggerBoop(e);
+            });
+
+
+            /* -------------------------------------------------------------
+               3. EYE TRACKING CONTROLLER (Triggered by Click on Photo)
+               ------------------------------------------------------------- */
+            const socketLeft = document.getElementById('socket-left');
+            const socketRight = document.getElementById('socket-right');
+            const irisLeft = document.getElementById('iris-left');
+            const irisRight = document.getElementById('iris-right');
+
+            let eyeTrackingActive = false;
+            let lastPointerX = window.innerWidth / 2;
+            let lastPointerY = window.innerHeight / 2;
+
+            let googlyActive = false;
+            const eyeLeft = document.getElementById('eye-left');
+            const eyeRight = document.getElementById('eye-right');
+            const pupilLeft = document.getElementById('pupil-left');
+            const pupilRight = document.getElementById('pupil-right');
+
+            function toggleEyeTracking(forceState) {
+                eyeTrackingActive = (forceState !== undefined) ? forceState : !eyeTrackingActive;
+                if (eyeTrackingActive) {
+                    stageEl.classList.add('tracking-active');
+                    updateRealisticEye(irisLeft, socketLeft, lastPointerX, lastPointerY);
+                    updateRealisticEye(irisRight, socketRight, lastPointerX, lastPointerY);
+                    console.log("%c👀 Eye tracking activated! Eyes are now following your cursor.", "color: #ffeb3b; font-weight: bold;");
+                } else {
+                    stageEl.classList.remove('tracking-active');
+                    if (irisLeft) irisLeft.style.transform = 'translate(0px, 0px)';
+                    if (irisRight) irisRight.style.transform = 'translate(0px, 0px)';
+                    console.log("%c👀 Eyes returned to rest. Click anywhere on the photo to wake them up!", "color: #888;");
+                }
+                return eyeTrackingActive;
+            }
+
+            // Clicking the photo (outside the nose) wakes up / toggles the eyes!
+            photoEl.addEventListener('click', (e) => {
+                toggleEyeTracking();
+            });
+
+            function updateRealisticEye(irisEl, socketEl, targetX, targetY) {
+                if (!irisEl || !socketEl) return;
+                const rect = socketEl.getBoundingClientRect();
+                if (rect.width === 0 || rect.height === 0) return;
+
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+
+                const dx = targetX - centerX;
+                const dy = targetY - centerY;
+                const distance = Math.hypot(dx, dy);
+                const angle = Math.atan2(dy, dx);
+
+                // Max movement range within the socket
+                const maxMoveX = rect.width * 0.28;
+                const maxMoveY = rect.height * 0.32;
+                const maxScreenDist = Math.max(window.innerWidth, window.innerHeight) * 0.45;
+                const intensity = Math.min(distance / maxScreenDist, 1.0);
+
+                const mx = Math.cos(angle) * maxMoveX * intensity;
+                const my = Math.sin(angle) * maxMoveY * intensity;
+
+                irisEl.style.transform = `translate(${mx}px, ${my}px)`;
+            }
+
+            function updatePupilPosition(pupilEl, eyeEl, targetX, targetY) {
+                if (!pupilEl || !eyeEl) return;
+                const rect = eyeEl.getBoundingClientRect();
+                const eyeCenterX = rect.left + rect.width / 2;
+                const eyeCenterY = rect.top + rect.height / 2;
+
+                const dx = targetX - eyeCenterX;
+                const dy = targetY - eyeCenterY;
+                const distance = Math.hypot(dx, dy);
+                const maxOffset = rect.width * 0.22;
+                const angle = Math.atan2(dy, dx);
+
+                const offsetDist = Math.min(distance * 0.08, maxOffset);
+                const pupilX = Math.cos(angle) * offsetDist;
+                const pupilY = Math.sin(angle) * offsetDist;
+
+                pupilEl.style.transform = `translate(${pupilX}px, ${pupilY}px)`;
+            }
+
+            function onPointerMove(clientX, clientY) {
+                lastPointerX = clientX;
+                lastPointerY = clientY;
+
+                // Eye tracking when activated by click
+                if (eyeTrackingActive) {
+                    updateRealisticEye(irisLeft, socketLeft, clientX, clientY);
+                    updateRealisticEye(irisRight, socketRight, clientX, clientY);
+                }
+
+                // Googly eyes tracking if active
+                if (googlyActive) {
+                    updatePupilPosition(pupilLeft, eyeLeft, clientX, clientY);
+                    updatePupilPosition(pupilRight, eyeRight, clientX, clientY);
+                }
+            }
+
+            window.addEventListener('pointermove', (e) => {
+                onPointerMove(e.clientX, e.clientY);
+            });
+
+            window.addEventListener('touchmove', (e) => {
+                if (e.touches && e.touches[0]) {
+                    onPointerMove(e.touches[0].clientX, e.touches[0].clientY);
+                }
+            }, { passive: true });
+
+            window.addEventListener('touchstart', (e) => {
+                if (e.touches && e.touches[0]) {
+                    onPointerMove(e.touches[0].clientX, e.touches[0].clientY);
+                }
+            }, { passive: true });
+
+            function toggleGooglyEyes(forceState) {
+                googlyActive = (forceState !== undefined) ? forceState : !googlyActive;
+                if (googlyActive) {
+                    playGooglySound();
+                    eyeLeft.classList.add('active');
+                    eyeRight.classList.add('active');
+                    console.log("%c👀 Googly eyes ACTIVATED! Double-click to return to realistic eyes.", "color: #00e5ff; font-weight: bold;");
+                } else {
+                    eyeLeft.classList.remove('active');
+                    eyeRight.classList.remove('active');
+                    console.log("%c👀 Googly eyes removed.", "color: #888;");
+                }
+                return googlyActive;
+            }
+
+            // Double click anywhere toggles googly eyes
+            let lastTapTime = 0;
+            window.addEventListener('dblclick', (e) => {
+                toggleGooglyEyes();
+            });
+
+            // Double tap support for mobile
+            window.addEventListener('touchend', (e) => {
+                const now = Date.now();
+                if (now - lastTapTime < 320 && now - lastTapTime > 0) {
+                    toggleGooglyEyes();
+                    lastTapTime = 0;
+                } else {
+                    lastTapTime = now;
+                }
+            });
+
+
+            /* -------------------------------------------------------------
+               4. "DEAL WITH IT" / PARTY MODE & CANVAS CONFETTI (Easter Egg 3)
+               ------------------------------------------------------------- */
+            let partyActive = false;
+            const sunglassesEl = document.getElementById('sunglasses');
+            const partyBannerEl = document.getElementById('party-banner');
+            const fxCanvas = document.getElementById('fx-canvas');
+            const ctx2d = fxCanvas.getContext('2d');
+
+            let confettiParticles = [];
+            let animFrameId = null;
+
+            function resizeCanvas() {
+                fxCanvas.width = window.innerWidth;
+                fxCanvas.height = window.innerHeight;
+            }
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            function spawnConfetti(count = 120) {
+                const colors = ['#ff0055', '#00f0ff', '#ffe600', '#00ff66', '#b026ff', '#ffffff', '#ff9900'];
+                for (let i = 0; i < count; i++) {
+                    confettiParticles.push({
+                        x: Math.random() * fxCanvas.width,
+                        y: -20 - Math.random() * fxCanvas.height * 0.5,
+                        w: 8 + Math.random() * 8,
+                        h: 6 + Math.random() * 6,
+                        color: colors[Math.floor(Math.random() * colors.length)],
+                        vx: (Math.random() - 0.5) * 4,
+                        vy: 3 + Math.random() * 5,
+                        rot: Math.random() * 360,
+                        rotSpeed: (Math.random() - 0.5) * 12,
+                        opacity: 1
+                    });
+                }
+                if (!animFrameId) {
+                    animateConfetti();
+                }
+            }
+
+            function animateConfetti() {
+                ctx2d.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+                for (let i = confettiParticles.length - 1; i >= 0; i--) {
+                    const p = confettiParticles[i];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.rot += p.rotSpeed;
+
+                    if (p.y > fxCanvas.height + 20) {
+                        if (partyActive) {
+                            p.y = -10;
+                            p.x = Math.random() * fxCanvas.width;
+                        } else {
+                            confettiParticles.splice(i, 1);
+                            continue;
+                        }
+                    }
+
+                    ctx2d.save();
+                    ctx2d.translate(p.x, p.y);
+                    ctx2d.rotate((p.rot * Math.PI) / 180);
+                    ctx2d.fillStyle = p.color;
+                    ctx2d.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+                    ctx2d.restore();
+                }
+
+                if (confettiParticles.length > 0 || partyActive) {
+                    animFrameId = requestAnimationFrame(animateConfetti);
+                } else {
+                    animFrameId = null;
+                    ctx2d.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+                }
+            }
+
+            function togglePartyMode(forceState) {
+                partyActive = (forceState !== undefined) ? forceState : !partyActive;
+                if (partyActive) {
+                    playPartyFanfare();
+                    document.body.classList.add('party-mode');
+                    sunglassesEl.classList.add('active');
+                    partyBannerEl.classList.add('active');
+                    spawnConfetti(140);
+                    console.log("%c🕶️ DEAL WITH IT! Party Mode ENABLED! 🎉", "color: #ff00ff; font-weight: bold; font-size: 1.2rem;");
+                } else {
+                    document.body.classList.remove('party-mode');
+                    sunglassesEl.classList.remove('active');
+                    partyBannerEl.classList.remove('active');
+                    console.log("%c🕶️ Party Mode turned off.", "color: #888;");
+                }
+                return partyActive;
+            }
+
+            // Konami Code Detector
+            const konamiCode = [
+                'ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown',
+                'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight',
+                'b', 'a'
+            ];
+            let konamiProgress = 0;
+
+            window.addEventListener('keydown', (e) => {
+                const key = e.key;
+
+                // Konami sequence tracking
+                const expectedKey = konamiCode[konamiProgress];
+                if (key.toLowerCase() === expectedKey.toLowerCase()) {
+                    konamiProgress++;
+                    if (konamiProgress === konamiCode.length) {
+                        togglePartyMode(true);
+                        konamiProgress = 0;
+                    }
+                } else {
+                    konamiProgress = (key.toLowerCase() === konamiCode[0].toLowerCase()) ? 1 : 0;
+                }
+
+                // Keyboard shortcuts
+                if (key.toLowerCase() === 'e') {
+                    toggleEyeTracking();
+                } else if (key.toLowerCase() === 'g') {
+                    toggleGooglyEyes();
+                } else if (key.toLowerCase() === 'b') {
+                    triggerBoop();
+                } else if (key.toLowerCase() === 'w') {
+                    playBarkSound();
+                } else if (key === 'Escape') {
+                    togglePartyMode(false);
+                    toggleEyeTracking(false);
+                    toggleGooglyEyes(false);
+                }
+            });
+
+            // Triple click detector for mobile/party mode
+            let clickCount = 0;
+            let clickTimer = null;
+            window.addEventListener('click', (e) => {
+                clickCount++;
+                clearTimeout(clickTimer);
+                clickTimer = setTimeout(() => {
+                    if (clickCount >= 3) {
+                        togglePartyMode();
+                    }
+                    clickCount = 0;
+                }, 380);
+            });
+
+
+            /* -------------------------------------------------------------
+               5. TREAT SHOWER SYSTEM
+               ------------------------------------------------------------- */
+            function giveTreat() {
+                const treats = ["🥩", "🍖", "🥓", "🍗", "🧀", "🌭", "🍪"];
+                playBoopSound(1.4);
+                setTimeout(() => playBarkSound(), 250);
+
+                for (let i = 0; i < 16; i++) {
+                    setTimeout(() => {
+                        const x = window.innerWidth * 0.15 + Math.random() * (window.innerWidth * 0.7);
+                        const y = window.innerHeight * 0.2 + Math.random() * (window.innerHeight * 0.6);
+                        const p = document.createElement('div');
+                        p.className = 'floating-particle';
+                        p.textContent = treats[Math.floor(Math.random() * treats.length)];
+                        p.style.left = `${x}px`;
+                        p.style.top = `${y}px`;
+                        p.style.setProperty('--dx', `${(Math.random() - 0.5) * 100}px`);
+                        p.style.setProperty('--dy', `${-80 - Math.random() * 80}px`);
+                        p.style.setProperty('--rot', `${(Math.random() - 0.5) * 180}deg`);
+                        document.body.appendChild(p);
+                        setTimeout(() => p.remove(), 1200);
+                    }, i * 45);
+                }
+                return "🍖 Treats delivered to Henry! Good boy!";
+            }
+
+
+            /* -------------------------------------------------------------
+               6. CONSOLE SECRETS & GLOBAL API (Easter Egg 6)
+               ------------------------------------------------------------- */
+            window.boop = function() {
+                triggerBoop();
+                return `🐶 Snoot booped! (Total boops: ${boopCount})`;
+            };
+
+            window.bark = function() {
+                playBarkSound();
+                return "🐶 *WOOF!*";
+            };
+
+            window.party = function(state) {
+                const s = togglePartyMode(state);
+                return s ? "🎉 PARTY MODE ACTIVATED! 🕶️" : "Party mode ended.";
+            };
+
+            window.eyes = function(state) {
+                const s = toggleEyeTracking(state);
+                return s ? "👀 Eye tracking awakened!" : "Eyes returned to rest.";
+            };
+
+            window.googly = function(state) {
+                const s = toggleGooglyEyes(state);
+                return s ? "👀 Googly eyes attached!" : "Googly eyes removed.";
+            };
+
+            window.treat = function() {
+                return giveTreat();
+            };
+
+            window.stats = function() {
+                console.table({
+                    "Boop Count": boopCount,
+                    "Eye Tracking Active": eyeTrackingActive,
+                    "Googly Eyes Active": googlyActive,
+                    "Party Mode Active": partyActive
+                });
+                return "🐶 Henry says thank you!";
+            };
+
+            window.help = function() {
+                console.log(
+                    "%c🐕 Secret Console Commands Available:\n" +
+                    "  • boop()   - Boop Henry's snoot\n" +
+                    "  • bark()   - Henry barks\n" +
+                    "  • eyes()   - Wake up / toggle eye tracking\n" +
+                    "  • googly() - Toggle cartoon googly eyes\n" +
+                    "  • party()  - Toggle 'Deal With It' / Party Mode\n" +
+                    "  • treat()  - Shower Henry in treats\n" +
+                    "  • stats()  - View Easter Egg stats\n" +
+                    "\n🎮 Click & Keyboard Secrets:\n" +
+                    "  • Click Photo: Wake up / toggle eye tracking\n" +
+                    "  • Click Snoot: Boop Henry's nose\n" +
+                    "  • Double-Click: Toggle Googly Eyes\n" +
+                    "  • Triple-Click / Konami Code (↑↑↓↓←→←→BA): Party Mode\n" +
+                    "  • Keys: [E]yes, [G]oogly, [B]oop, [W]oof, [Esc] Reset",
+                    "color: #ffe600; font-family: monospace; font-size: 0.95rem; line-height: 1.5;"
+                );
+                return "Have fun exploring!";
+            };
+
+            // Developer Greeting Art
+            const dogArt = 
+`%c
+   / \\__
+  (    @\\___
+  /         O   ~ *boop the snoot* ~
+ /   (_____/
+/_____/   U
+`;
+
+            console.log(dogArt, "color: #ffaa00; font-weight: bold; font-family: monospace;");
+            console.log(
+                "%c🐶 Welcome to jbirdkerr.net! %c\n" +
+                "You found the secret dev console! Try typing %chelp()%c, %cboop()%c, %cbark()%c, %ceyes()%c, or %cparty()%c.",
+                "background: #222; color: #00ff88; font-weight: bold; font-size: 1.1rem; padding: 4px 8px; border-radius: 4px;",
+                "",
+                "color: #ffeb3b; font-weight: bold;", "",
+                "color: #ffeb3b; font-weight: bold;", "",
+                "color: #ffeb3b; font-weight: bold;", "",
+                "color: #ffeb3b; font-weight: bold;", "",
+                "color: #ffeb3b; font-weight: bold;", ""
+            );
+        })();
+    </script>
 </body>
 </html>

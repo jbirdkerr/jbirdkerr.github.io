@@ -356,6 +356,165 @@
             pointer-events: none;
             z-index: 90;
         }
+
+        /* Metrics Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 500;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .modal-content {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid #00d4ff;
+            border-radius: 12px;
+            padding: 24px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 8px 32px rgba(0, 212, 255, 0.3), inset 0 0 20px rgba(0, 212, 255, 0.1);
+            color: #fff;
+            font-family: monospace;
+        }
+
+        .modal-content h2 {
+            color: #00d4ff;
+            margin-bottom: 16px;
+            font-size: 1.4rem;
+            text-shadow: 0 0 10px rgba(0, 212, 255, 0.6);
+        }
+
+        .modal-content h3 {
+            color: #ffeb3b;
+            margin-top: 16px;
+            margin-bottom: 8px;
+            font-size: 1rem;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+        }
+
+        .metric-label {
+            color: #aaa;
+        }
+
+        .metric-value {
+            color: #00ff88;
+            font-weight: bold;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin: 12px 0;
+        }
+
+        .feature-box {
+            background: rgba(0, 212, 255, 0.1);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 6px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .feature-name {
+            color: #aaa;
+            font-size: 0.85rem;
+            margin-bottom: 4px;
+        }
+
+        .feature-count {
+            color: #00ff88;
+            font-size: 1.3rem;
+            font-weight: bold;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: none;
+            border: none;
+            color: #00d4ff;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 4px 8px;
+            transition: color 0.2s;
+        }
+
+        .modal-close:hover {
+            color: #ffeb3b;
+        }
+
+        .metrics-toggle {
+            position: fixed;
+            right: 24px;
+            background: rgba(0, 212, 255, 0.15);
+            border: 1px solid rgba(0, 212, 255, 0.5);
+            color: #00d4ff;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            z-index: 250;
+            transition: all 0.2s ease;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-weight: 500;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        #metrics-toggle {
+            top: 24px;
+        }
+
+        #credits-toggle {
+            top: 64px;
+        }
+
+        .metrics-toggle:hover {
+            background: rgba(0, 212, 255, 0.25);
+            border-color: #00d4ff;
+            box-shadow: 0 0 12px rgba(0, 212, 255, 0.4);
+        }
+
+        .metrics-toggle:active {
+            transform: scale(0.95);
+        }
+
+        .loading {
+            color: #ffeb3b;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .error {
+            color: #ff6b6b;
+            text-align: center;
+            padding: 20px;
+        }
     </style>
 </head>
 <body>
@@ -425,11 +584,102 @@
         🎉 DEAL WITH IT • PARTY MODE 🎉
     </div>
 
+    <!-- Metrics Toggle Button -->
+    <button 
+        class="metrics-toggle" 
+        id="metrics-toggle" 
+        hx-get="https://api.jbirdkerr.net/metrics"
+        hx-target="#metrics-container"
+        hx-indicator="#metrics-loading"
+        title="Open metrics dashboard">📊 Metrics</button>
+
+    <!-- Credits Toggle Button -->
+    <button 
+        class="metrics-toggle"
+        id="credits-toggle"
+        title="View credits">💳 Credits</button>
+
+    <!-- Metrics Modal -->
+    <div class="modal-overlay" id="metrics-modal">
+        <div class="modal-content" id="modal-content">
+            <button class="modal-close" onclick="document.getElementById('metrics-modal').classList.remove('active')">✕</button>
+            <h2>🐶 Henry's Stats</h2>
+            <div id="metrics-container" class="htmx-request">
+                <div class="loading" id="metrics-loading">📊 Loading metrics...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Credits Modal (stub for future use) -->
+    <div class="modal-overlay" id="credits-modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="document.getElementById('credits-modal').classList.remove('active')">✕</button>
+            <h2>💳 Credits & Attribution</h2>
+            <div style="padding: 12px 0;">
+                <p style="margin-bottom: 12px; color: #aaa;">Built with:</p>
+                <div style="font-size: 0.9rem; line-height: 1.8; color: #00d4ff;">
+                    <div>🐶 Henry Beard (the good boy)</div>
+                    <div>📊 <a href="https://posthog.com" style="color: #00d4ff;">PostHog</a> (analytics)</div>
+                    <div>☁️ <a href="https://cloudflare.com" style="color: #00d4ff;">Cloudflare Workers</a> (infrastructure)</div>
+                    <div>🌐 <a href="https://pages.github.com" style="color: #00d4ff;">GitHub Pages</a> (hosting)</div>
+                    <div>🎯 <a href="https://htmx.org" style="color: #00d4ff;">HTMX</a> (interactions)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org"></script>
+
+    <!-- PostHog Script -->
+    <script>
+        !function(t,e){var o,n,p,r;e.__SV||(window.posthog && window.posthog.__loaded)||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}p||((p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",p.onerror=function(){p=null},(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r));var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="fo po init Fo Oo qo Zs Lo Bo Ro capture Do vo Go calculateEventProperties Vo register register_once register_for_session unregister unregister_for_session Ko Ao Zo getFeatureFlag getFeatureFlagPayload getFeatureFlagResult getAllFeatureFlags isFeatureEnabled reloadFeatureFlags updateFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSurveysLoaded onSessionId getSurveys getActiveMatchingSurveys renderSurvey displaySurvey cancelPendingSurvey canRenderSurvey canRenderSurveyAsync Yo identify setPersonProperties unsetPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset Xo shutdown setIdentity clearIdentity get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException addExceptionStep captureLog startExceptionAutocapture stopExceptionAutocapture loadToolbar get_property getSessionProperty Qo Uo createPersonProfile setInternalOrTestUser Jo Eo il opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing get_explicit_consent_status is_capturing clear_opt_in_out_capturing Ho debug Js mn getPageViewId captureTraceFeedback captureTraceMetric Co".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+        posthog.init('phc_zugUWyUvq2VWid5q6XxqRtHnBXsoLDB9BhaaY6VxVuXJ', {
+            api_host: 'https://us.i.posthog.com',
+            person_profiles: 'always'
+        })
+    </script>
+
+    <script>
+        function captureEvent(eventName, properties = {}) {
+            if (window.posthog) {
+                window.posthog.capture(eventName, properties);
+            }
+        }
+    </script>
+
     <script>
         (function() {
-            /* -------------------------------------------------------------
-               1. AUDIO ENGINE (Web Audio API Synthesizer - Zero Dependencies)
-               ------------------------------------------------------------- */
+            /* ============================================================
+               MODAL SYSTEM (HTMX-driven)
+               ============================================================ */
+            const metricsToggle = document.getElementById('metrics-toggle');
+            const creditsToggle = document.getElementById('credits-toggle');
+            const metricsModal = document.getElementById('metrics-modal');
+            const creditsModal = document.getElementById('credits-modal');
+
+            // Metrics modal
+            metricsToggle.addEventListener('click', (e) => {
+                e.preventDefault();
+                metricsModal.classList.add('active');
+                // HTMX will fetch when button is clicked
+            });
+
+            // Credits modal
+            creditsToggle.addEventListener('click', () => {
+                creditsModal.classList.add('active');
+            });
+
+            // Close modals on overlay click
+            document.addEventListener('click', (e) => {
+                if (e.target.classList.contains('modal-overlay')) {
+                    e.target.classList.remove('active');
+                }
+            });
+
+            /* ============================================================
+               AUDIO ENGINE (Web Audio API Synthesizer - Zero Dependencies)
+               ============================================================ */
             let audioCtx = null;
 
             function getAudioContext() {
@@ -557,9 +807,9 @@
             }
 
 
-            /* -------------------------------------------------------------
-               2. BOOP & PARTICLE SYSTEM (Easter Egg 1)
-               ------------------------------------------------------------- */
+            /* ============================================================
+               BOOP & PARTICLE SYSTEM
+               ============================================================ */
             let boopCount = 0;
             const photoEl = document.getElementById('photo');
             const snootEl = document.getElementById('snoot');
@@ -615,8 +865,13 @@
                 const pitch = 0.85 + Math.random() * 0.4;
                 playBoopSound(pitch);
 
+                // Track with PostHog
+                captureEvent('boop', {
+                    combo_count: boopCount,
+                    via: e ? 'click' : 'api'
+                });
+
                 photoEl.classList.remove('boop-squish');
-                // Force reflow
                 void photoEl.offsetWidth;
                 photoEl.classList.add('boop-squish');
                 setTimeout(() => photoEl.classList.remove('boop-squish'), 140);
@@ -650,9 +905,9 @@
             });
 
 
-            /* -------------------------------------------------------------
-               3. EYE TRACKING CONTROLLER (Triggered by Click on Photo)
-               ------------------------------------------------------------- */
+            /* ============================================================
+               EYE TRACKING CONTROLLER
+               ============================================================ */
             const socketLeft = document.getElementById('socket-left');
             const socketRight = document.getElementById('socket-right');
             const irisLeft = document.getElementById('iris-left');
@@ -674,17 +929,18 @@
                     stageEl.classList.add('tracking-active');
                     updateRealisticEye(irisLeft, socketLeft, lastPointerX, lastPointerY);
                     updateRealisticEye(irisRight, socketRight, lastPointerX, lastPointerY);
-                    console.log("%c👀 Eye tracking activated! Eyes are now following your cursor.", "color: #ffeb3b; font-weight: bold;");
+                    captureEvent('feature_toggle', { feature: 'eye_tracking', enabled: true, trigger: 'click' });
+                    console.log("%c👀 Eye tracking activated!", "color: #ffeb3b; font-weight: bold;");
                 } else {
                     stageEl.classList.remove('tracking-active');
                     if (irisLeft) irisLeft.style.transform = 'translate(0px, 0px)';
                     if (irisRight) irisRight.style.transform = 'translate(0px, 0px)';
-                    console.log("%c👀 Eyes returned to rest. Click anywhere on the photo to wake them up!", "color: #888;");
+                    captureEvent('feature_toggle', { feature: 'eye_tracking', enabled: false });
+                    console.log("%c👀 Eyes returned to rest.", "color: #888;");
                 }
                 return eyeTrackingActive;
             }
 
-            // Clicking the photo (outside the nose) wakes up / toggles the eyes!
             photoEl.addEventListener('click', (e) => {
                 toggleEyeTracking();
             });
@@ -702,7 +958,6 @@
                 const distance = Math.hypot(dx, dy);
                 const angle = Math.atan2(dy, dx);
 
-                // Max movement range within the socket
                 const maxMoveX = rect.width * 0.28;
                 const maxMoveY = rect.height * 0.32;
                 const maxScreenDist = Math.max(window.innerWidth, window.innerHeight) * 0.45;
@@ -737,13 +992,11 @@
                 lastPointerX = clientX;
                 lastPointerY = clientY;
 
-                // Eye tracking when activated by click
                 if (eyeTrackingActive) {
                     updateRealisticEye(irisLeft, socketLeft, clientX, clientY);
                     updateRealisticEye(irisRight, socketRight, clientX, clientY);
                 }
 
-                // Googly eyes tracking if active
                 if (googlyActive) {
                     updatePupilPosition(pupilLeft, eyeLeft, clientX, clientY);
                     updatePupilPosition(pupilRight, eyeRight, clientX, clientY);
@@ -772,22 +1025,22 @@
                     playGooglySound();
                     eyeLeft.classList.add('active');
                     eyeRight.classList.add('active');
-                    console.log("%c👀 Googly eyes ACTIVATED! Double-click to return to realistic eyes.", "color: #00e5ff; font-weight: bold;");
+                    captureEvent('feature_toggle', { feature: 'googly_eyes', enabled: true, trigger: 'double_click' });
+                    console.log("%c👀 Googly eyes ACTIVATED!", "color: #00e5ff; font-weight: bold;");
                 } else {
                     eyeLeft.classList.remove('active');
                     eyeRight.classList.remove('active');
+                    captureEvent('feature_toggle', { feature: 'googly_eyes', enabled: false });
                     console.log("%c👀 Googly eyes removed.", "color: #888;");
                 }
                 return googlyActive;
             }
 
-            // Double click anywhere toggles googly eyes
             let lastTapTime = 0;
             window.addEventListener('dblclick', (e) => {
                 toggleGooglyEyes();
             });
 
-            // Double tap support for mobile
             window.addEventListener('touchend', (e) => {
                 const now = Date.now();
                 if (now - lastTapTime < 320 && now - lastTapTime > 0) {
@@ -799,9 +1052,9 @@
             });
 
 
-            /* -------------------------------------------------------------
-               4. "DEAL WITH IT" / PARTY MODE & CANVAS CONFETTI (Easter Egg 3)
-               ------------------------------------------------------------- */
+            /* ============================================================
+               PARTY MODE & CONFETTI
+               ============================================================ */
             let partyActive = false;
             const sunglassesEl = document.getElementById('sunglasses');
             const partyBannerEl = document.getElementById('party-banner');
@@ -881,11 +1134,13 @@
                     sunglassesEl.classList.add('active');
                     partyBannerEl.classList.add('active');
                     spawnConfetti(140);
-                    console.log("%c🕶️ DEAL WITH IT! Party Mode ENABLED! 🎉", "color: #ff00ff; font-weight: bold; font-size: 1.2rem;");
+                    captureEvent('feature_toggle', { feature: 'party_mode', enabled: true });
+                    console.log("%c🕶️ DEAL WITH IT! Party Mode ENABLED!", "color: #ff00ff; font-weight: bold; font-size: 1.2rem;");
                 } else {
                     document.body.classList.remove('party-mode');
                     sunglassesEl.classList.remove('active');
                     partyBannerEl.classList.remove('active');
+                    captureEvent('feature_toggle', { feature: 'party_mode', enabled: false });
                     console.log("%c🕶️ Party Mode turned off.", "color: #888;");
                 }
                 return partyActive;
@@ -902,19 +1157,18 @@
             window.addEventListener('keydown', (e) => {
                 const key = e.key;
 
-                // Konami sequence tracking
                 const expectedKey = konamiCode[konamiProgress];
                 if (key.toLowerCase() === expectedKey.toLowerCase()) {
                     konamiProgress++;
                     if (konamiProgress === konamiCode.length) {
                         togglePartyMode(true);
+                        captureEvent('feature_toggle', { feature: 'party_mode', enabled: true, trigger: 'konami' });
                         konamiProgress = 0;
                     }
                 } else {
                     konamiProgress = (key.toLowerCase() === konamiCode[0].toLowerCase()) ? 1 : 0;
                 }
 
-                // Keyboard shortcuts
                 if (key.toLowerCase() === 'e') {
                     toggleEyeTracking();
                 } else if (key.toLowerCase() === 'g') {
@@ -923,6 +1177,7 @@
                     triggerBoop();
                 } else if (key.toLowerCase() === 'w') {
                     playBarkSound();
+                    captureEvent('console_command', { command: 'bark' });
                 } else if (key === 'Escape') {
                     togglePartyMode(false);
                     toggleEyeTracking(false);
@@ -930,7 +1185,6 @@
                 }
             });
 
-            // Triple click detector for mobile/party mode
             let clickCount = 0;
             let clickTimer = null;
             window.addEventListener('click', (e) => {
@@ -939,19 +1193,22 @@
                 clickTimer = setTimeout(() => {
                     if (clickCount >= 3) {
                         togglePartyMode();
+                        captureEvent('feature_toggle', { feature: 'party_mode', enabled: partyActive, trigger: 'triple_click' });
                     }
                     clickCount = 0;
                 }, 380);
             });
 
 
-            /* -------------------------------------------------------------
-               5. TREAT SHOWER SYSTEM
-               ------------------------------------------------------------- */
+            /* ============================================================
+               TREAT SHOWER SYSTEM
+               ============================================================ */
             function giveTreat() {
                 const treats = ["🥩", "🍖", "🥓", "🍗", "🧀", "🌭", "🍪"];
                 playBoopSound(1.4);
                 setTimeout(() => playBarkSound(), 250);
+
+                captureEvent('treat_shower', { treat_count: 16 });
 
                 for (let i = 0; i < 16; i++) {
                     setTimeout(() => {
@@ -969,26 +1226,28 @@
                         setTimeout(() => p.remove(), 1200);
                     }, i * 45);
                 }
-                return "🍖 Treats delivered to Henry! Good boy!";
+                return "🍖 Treats delivered!";
             }
 
 
-            /* -------------------------------------------------------------
-               6. CONSOLE SECRETS & GLOBAL API (Easter Egg 6)
-               ------------------------------------------------------------- */
+            /* ============================================================
+               CONSOLE COMMANDS
+               ============================================================ */
             window.boop = function() {
                 triggerBoop();
+                captureEvent('console_command', { command: 'boop' });
                 return `🐶 Snoot booped! (Total boops: ${boopCount})`;
             };
 
             window.bark = function() {
                 playBarkSound();
+                captureEvent('console_command', { command: 'bark' });
                 return "🐶 *WOOF!*";
             };
 
             window.party = function(state) {
                 const s = togglePartyMode(state);
-                return s ? "🎉 PARTY MODE ACTIVATED! 🕶️" : "Party mode ended.";
+                return s ? "🎉 PARTY MODE ACTIVATED!" : "Party mode ended.";
             };
 
             window.eyes = function(state) {
@@ -1024,7 +1283,7 @@
                     "  • googly() - Toggle cartoon googly eyes\n" +
                     "  • party()  - Toggle 'Deal With It' / Party Mode\n" +
                     "  • treat()  - Shower Henry in treats\n" +
-                    "  • stats()  - View Easter Egg stats\n" +
+                    "  • stats()  - View stats\n" +
                     "\n🎮 Click & Keyboard Secrets:\n" +
                     "  • Click Photo: Wake up / toggle eye tracking\n" +
                     "  • Click Snoot: Boop Henry's nose\n" +
@@ -1036,7 +1295,6 @@
                 return "Have fun exploring!";
             };
 
-            // Developer Greeting Art
             const dogArt = 
 `%c
    / \\__
@@ -1049,13 +1307,9 @@
             console.log(dogArt, "color: #ffaa00; font-weight: bold; font-family: monospace;");
             console.log(
                 "%c🐶 Welcome to jbirdkerr.net! %c\n" +
-                "You found the secret dev console! Try typing %chelp()%c, %cboop()%c, %cbark()%c, %ceyes()%c, or %cparty()%c.",
+                "You found the secret dev console! Try typing %chelp()%c.",
                 "background: #222; color: #00ff88; font-weight: bold; font-size: 1.1rem; padding: 4px 8px; border-radius: 4px;",
                 "",
-                "color: #ffeb3b; font-weight: bold;", "",
-                "color: #ffeb3b; font-weight: bold;", "",
-                "color: #ffeb3b; font-weight: bold;", "",
-                "color: #ffeb3b; font-weight: bold;", "",
                 "color: #ffeb3b; font-weight: bold;", ""
             );
         })();

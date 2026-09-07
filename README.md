@@ -23,6 +23,7 @@ This repository contains the personal website hosted on **GitHub Pages** along w
 | :--- | :--- | :--- |
 | `GET` | `/metrics` | Fetches recent events from PostHog, aggregates totals, and returns HTML for HTMX integration. |
 | `POST` | `/capture` | Ingests client analytics events and forwards them to PostHog (`https://us.i.posthog.com/capture/`). |
+| `GET` | `/static/*` | Proxies PostHog JS SDK static assets (`array.js`) to bypass ad-blockers. |
 | `GET` | `/health` | Health check endpoint returning `{"status": "ok"}`. |
 
 ---
@@ -34,14 +35,18 @@ This repository contains the personal website hosted on **GitHub Pages** along w
 
 ### 2. Cloudflare Secrets (Uploaded via CLI)
 
-To set up the Worker, two PostHog API keys are used:
-
 | Secret Name | Key Type | Purpose | How to generate in PostHog |
 | :--- | :--- | :--- | :--- |
 | `POSTHOG_API_KEY` | Personal API Key (`phx_...`) | Reading project events (`GET /metrics`). | **Account Settings** -> **Personal API Keys** -> Create key with `read:events` scope. |
 | `POSTHOG_PROJECT_KEY` | Project API Key (`phc_...`) | Ingesting analytics events (`POST /capture`). | **Project Settings** -> **Project API Key**. |
 
----
+### 3. GitHub Repository Secrets (For CI/CD Auto-Deploy)
+
+Add this secret under **Settings** -> **Secrets and variables** -> **Actions** in your GitHub repository:
+
+| Secret Name | Description |
+| :--- | :--- |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token with Workers deployment permissions (allows GitHub Actions to run `wrangler deploy`). |
 
 ## 🚀 Setup & Deployment
 

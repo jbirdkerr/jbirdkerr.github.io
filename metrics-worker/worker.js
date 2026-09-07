@@ -1,6 +1,6 @@
 /**
- * Cloudflare Worker - PostHog Metrics Proxy
- * Securely proxies PostHog API requests and aggregates data
+ * Cloudflare Worker - PostHog Metrics & Reverse Proxy
+ * Securely proxies PostHog API requests, events, assets, and aggregates metrics
  */
 
 export default {
@@ -11,61 +11,13 @@ export default {
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-      'Content-Type': 'application/json'
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true'
     };
 
     // Handle preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
-    }
-
-    // Route: GET /static/* (proxies PostHog array.js asset SDK)
-    if (url.pathname.startsWith('/static/') && request.method === 'GET') {
-      try {
-        const assetUrl = `https://us-assets.i.posthog.com${url.pathname}${url.search}`;
-        const assetResponse = await fetch(assetUrl);
-        const headers = new Headers(assetResponse.headers);
-        headers.set('Access-Control-Allow-Origin', '*');
-        headers.set('Cache-Control', 'public, max-age=86400');
-        return new Response(assetResponse.body, {
-          status: assetResponse.status,
-          headers: headers
-        });
-      } catch (error) {
-        console.error('Static asset proxy error:', error);
-        return new Response('Asset not found', { status: 404, headers: corsHeaders });
-      }
-    }
-
-    // Route: POST /capture (ingests/sends events to PostHog)
-    if ((url.pathname === '/capture' || url.pathname === '/event') && request.method === 'POST') {
-      try {
-        const payload = await request.json();
-        const projectKey = env.POSTHOG_PROJECT_KEY || env.POSTHOG_PUBLIC_KEY;
-
-        if (projectKey && !payload.api_key && !payload.token) {
-          payload.api_key = projectKey;
-        }
-
-        const posthogResponse = await fetch('https://us.i.posthog.com/capture/', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        const data = await posthogResponse.text();
-        return new Response(data, {
-          status: posthogResponse.status,
-          headers: corsHeaders
-        });
-      } catch (error) {
-        console.error('Capture error:', error);
-        return new Response(
-          JSON.stringify({ error: error.message }),
-          { status: 500, headers: corsHeaders }
-        );
-      }
     }
 
     // Route: GET /metrics (returns HTML for HTMX)
@@ -119,17 +71,86 @@ export default {
     // Route: GET /health
     if (url.pathname === '/health' && request.method === 'GET') {
       return new Response(JSON.stringify({ status: 'ok' }), {
-        headers: corsHeaders
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    // 404
+    // PostHog Reverse Proxy Routes
+    // Handles JS SDK assets (/array/*, /static/*), event tracking (/e/*, /capture, /s/*), and flags (/flags/*, /decide)
+    if (
+      url.pathname.startsWith('/static/') ||
+      url.pathname.startsWith('/array/') ||
+      url.pathname.startsWith('/e/') ||
+      url.pathname.startsWith('/s/') ||
+      url.pathname.startsWith('/flags/') ||
+      url.pathname.startsWith('/decide') ||
+      url.pathname.startsWith('/capture') ||
+      url.pathname.startsWith('/engage') ||
+      url.pathname.startsWith('/i/')
+    ) {
+      return handlePostHogProxy(request, url);
+    }
+
+    // Fallback 404
     return new Response(
       JSON.stringify({ error: 'Not found' }),
-      { status: 404, headers: corsHeaders }
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 };
+
+/**
+ * Forward PostHog requests to official PostHog endpoints
+ */
+async function handlePostHogProxy(request, url) {
+  const isAsset = url.pathname.startsWith('/static/') || url.pathname.startsWith('/array/');
+  const targetHost = isAsset ? 'us-assets.i.posthog.com' : 'us.i.posthog.com';
+
+  const proxyUrl = new URL(url.toString());
+  proxyUrl.host = targetHost;
+  proxyUrl.protocol = 'https:';
+
+  const headers = new Headers(request.headers);
+  headers.set('host', targetHost);
+  if (request.headers.get('x-forwarded-for')) {
+    headers.set('x-forwarded-for', request.headers.get('x-forwarded-for'));
+  }
+
+  const init = {
+    method: request.method,
+    headers: headers,
+    redirect: 'follow'
+  };
+
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    init.body = await request.clone().arrayBuffer();
+  }
+
+  try {
+    const response = await fetch(proxyUrl.toString(), init);
+    const responseHeaders = new Headers(response.headers);
+    responseHeaders.set('Access-Control-Allow-Origin', '*');
+    responseHeaders.set('Access-Control-Allow-Credentials', 'true');
+
+    if (isAsset) {
+      responseHeaders.set('Cache-Control', 'public, max-age=86400');
+    }
+
+    return new Response(response.body, {
+      status: response.status,
+      headers: responseHeaders
+    });
+  } catch (error) {
+    console.error('PostHog proxy error:', error);
+    return new Response(JSON.stringify({ error: 'Proxy failed' }), {
+      status: 502,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Content-Type': 'application/json'
+      }
+    });
+  }
+}
 
 /**
  * Aggregate PostHog events into meaningful metrics

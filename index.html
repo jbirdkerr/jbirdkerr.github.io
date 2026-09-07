@@ -589,9 +589,6 @@
     <button 
         class="metrics-toggle" 
         id="metrics-toggle" 
-        hx-get="https://metrics-api.jbirdkerr.net/metrics"
-        hx-target="#metrics-container"
-        hx-indicator="#metrics-loading"
         title="Open metrics dashboard">📊 Metrics</button>
 
     <!-- Credits Toggle Button -->
@@ -665,7 +662,12 @@
             metricsToggle.addEventListener('click', (e) => {
                 e.preventDefault();
                 metricsModal.classList.add('active');
-                // HTMX will fetch when button is clicked
+                if (window.htmx) {
+                    window.htmx.ajax('GET', 'https://metrics-api.jbirdkerr.net/metrics', {
+                        target: '#metrics-container',
+                        indicator: '#metrics-loading'
+                    });
+                }
             });
 
             // Credits modal

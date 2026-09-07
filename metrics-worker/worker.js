@@ -7,21 +7,48 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
+    const origin = request.headers.get('Origin');
+    const allowedOrigins = [
+      'https://jbirdkerr.net',
+      'https://www.jbirdkerr.net',
+      'https://jbirdkerr.github.io'
+    ];
+
+    // If an origin is passed by a browser and it's not allowed, block cross-origin access
+    const isAllowedOrigin = !origin || allowedOrigins.includes(origin);
+    const corsOrigin = isAllowedOrigin ? (origin || 'https://jbirdkerr.net') : 'https://jbirdkerr.net';
+
     // CORS headers
     const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': corsOrigin,
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Allow-Credentials': 'true'
     };
+
+    // Reject unauthorized cross-origin requests from foreign browser domains
+    if (origin && !isAllowedOrigin && request.method !== 'OPTIONS') {
+      return new Response(JSON.stringify({ error: 'Unauthorized origin' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
     // Handle preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
     }
 
-    // Route: GET /metrics (returns HTML for HTMX)
+    // Route: GET /metrics (returns HTML for HTMX with edge caching)
     if (url.pathname === '/metrics' && request.method === 'GET') {
+      const cache = caches.default;
+      const cacheKey = new Request(url.toString(), request);
+      let cachedResponse = await cache.match(cacheKey);
+
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+
       try {
         const posthogKey = env.POSTHOG_API_KEY;
         const projectId = env.POSTHOG_PROJECT_ID;
@@ -33,8 +60,8 @@ export default {
           );
         }
 
-        // Fetch events from PostHog API
-        const eventsUrl = `https://us.posthog.com/api/projects/${projectId}/events/?limit=500`;
+        // Fetch events from PostHog API (limit=100 for fast response)
+        const eventsUrl = `https://us.posthog.com/api/projects/${projectId}/events/?limit=100`;
         const eventsResponse = await fetch(eventsUrl, {
           headers: {
             'Authorization': `Bearer ${posthogKey}`,
@@ -55,10 +82,17 @@ export default {
         // Render as HTML
         const html = renderMetricsHTML(metrics);
 
-        return new Response(html, {
+        const response = new Response(html, {
           status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'text/html' }
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'text/html',
+            'Cache-Control': 'public, max-age=60, s-maxage=60'
+          }
         });
+
+        ctx.waitUntil(cache.put(cacheKey, response.clone()));
+        return response;
       } catch (error) {
         console.error('Worker error:', error);
         return new Response(
@@ -88,7 +122,7 @@ export default {
       url.pathname.startsWith('/engage') ||
       url.pathname.startsWith('/i/')
     ) {
-      return handlePostHogProxy(request, url);
+      return handlePostHogProxy(request, url, corsHeaders);
     }
 
     // Fallback 404
@@ -100,9 +134,9 @@ export default {
 };
 
 /**
- * Forward PostHog requests to official PostHog endpoints
+ * Forward PostHog requests to official PostHog endpoints with CORS & Cache handling
  */
-async function handlePostHogProxy(request, url) {
+async function handlePostHogProxy(request, url, corsHeaders) {
   const isAsset = url.pathname.startsWith('/static/') || url.pathname.startsWith('/array/');
   const targetHost = isAsset ? 'us-assets.i.posthog.com' : 'us.i.posthog.com';
 
@@ -129,8 +163,11 @@ async function handlePostHogProxy(request, url) {
   try {
     const response = await fetch(proxyUrl.toString(), init);
     const responseHeaders = new Headers(response.headers);
-    responseHeaders.set('Access-Control-Allow-Origin', '*');
-    responseHeaders.set('Access-Control-Allow-Credentials', 'true');
+    
+    // Set CORS origin and credentials
+    Object.entries(corsHeaders).forEach(([key, val]) => {
+      responseHeaders.set(key, val);
+    });
 
     if (isAsset) {
       responseHeaders.set('Cache-Control', 'public, max-age=86400');
@@ -145,7 +182,7 @@ async function handlePostHogProxy(request, url) {
     return new Response(JSON.stringify({ error: 'Proxy failed' }), {
       status: 502,
       headers: {
-        'Access-Control-Allow-Origin': '*',
+        ...corsHeaders,
         'Content-Type': 'application/json'
       }
     });

@@ -20,6 +20,24 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
 
+    // Route: GET /static/* (proxies PostHog array.js asset SDK)
+    if (url.pathname.startsWith('/static/') && request.method === 'GET') {
+      try {
+        const assetUrl = `https://us-assets.i.posthog.com${url.pathname}${url.search}`;
+        const assetResponse = await fetch(assetUrl);
+        const headers = new Headers(assetResponse.headers);
+        headers.set('Access-Control-Allow-Origin', '*');
+        headers.set('Cache-Control', 'public, max-age=86400');
+        return new Response(assetResponse.body, {
+          status: assetResponse.status,
+          headers: headers
+        });
+      } catch (error) {
+        console.error('Static asset proxy error:', error);
+        return new Response('Asset not found', { status: 404, headers: corsHeaders });
+      }
+    }
+
     // Route: POST /capture (ingests/sends events to PostHog)
     if ((url.pathname === '/capture' || url.pathname === '/event') && request.method === 'POST') {
       try {

@@ -87,7 +87,7 @@ export default {
           headers: {
             ...corsHeaders,
             'Content-Type': 'text/html',
-            'Cache-Control': 'public, max-age=60, s-maxage=60'
+            'Cache-Control': 'public, max-age=10, s-maxage=10'
           }
         });
 

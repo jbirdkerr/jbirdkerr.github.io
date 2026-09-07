@@ -60,24 +60,82 @@ export default {
           );
         }
 
-        // Fetch events from PostHog API (limit=100 for fast response)
-        const eventsUrl = `https://us.posthog.com/api/projects/${projectId}/events/?limit=100`;
-        const eventsResponse = await fetch(eventsUrl, {
-          headers: {
-            'Authorization': `Bearer ${posthogKey}`,
-            'Content-Type': 'application/json'
+        // Query PostHog ClickHouse database using HogQL for instant all-time stats
+        const queryUrl = `https://us.posthog.com/api/projects/${projectId}/query/`;
+        const hogqlQuery = {
+          query: {
+            kind: 'HogQLQuery',
+            query: `
+              SELECT
+                countIf(event = 'boop') as total_boops,
+                max(if(event = 'boop', toFloat(JSONExtractRaw(properties, 'combo_count')), 0)) as top_combo,
+                count() as total_events,
+                countIf(event = 'feature_toggle' and JSONExtractRaw(properties, 'feature') = '"eye_tracking"' and JSONExtractRaw(properties, 'enabled') = 'true') as eye_tracking,
+                countIf(event = 'feature_toggle' and JSONExtractRaw(properties, 'feature') = '"googly_eyes"' and JSONExtractRaw(properties, 'enabled') = 'true') as googly_eyes,
+                countIf(event = 'feature_toggle' and JSONExtractRaw(properties, 'feature') = '"party_mode"' and JSONExtractRaw(properties, 'enabled') = 'true') as party_mode,
+                countIf(event = 'treat_shower') as treats,
+                sum(if(event = 'eye_movement', toFloat(JSONExtractRaw(properties, 'distance_px')), 0)) as total_eye_dist
+              FROM events
+            `
           }
-        });
+        };
 
-        if (!eventsResponse.ok) {
-          throw new Error(`PostHog API error: ${eventsResponse.status}`);
+        const breakdownQuery = {
+          query: {
+            kind: 'HogQLQuery',
+            query: `SELECT event, count() as cnt FROM events GROUP BY event ORDER BY cnt DESC LIMIT 10`
+          }
+        };
+
+        // Fetch both aggregations in parallel
+        const [statsResponse, breakdownResponse] = await Promise.all([
+          fetch(queryUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${posthogKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(hogqlQuery)
+          }),
+          fetch(queryUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${posthogKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(breakdownQuery)
+          })
+        ]);
+
+        if (!statsResponse.ok || !breakdownResponse.ok) {
+          throw new Error(`PostHog API error: ${statsResponse.status || breakdownResponse.status}`);
         }
 
-        const eventsData = await eventsResponse.json();
-        const events = eventsData.results || [];
+        const statsData = await statsResponse.json();
+        const breakdownData = await breakdownResponse.json();
 
-        // Aggregate metrics
-        const metrics = aggregateMetrics(events);
+        const row = (statsData.results && statsData.results[0]) || [0, 0, 0, 0, 0, 0, 0, 0];
+        const breakdownMap = {};
+        (breakdownData.results || []).forEach(([evt, cnt]) => {
+          breakdownMap[evt] = cnt;
+        });
+
+        const totalEyeDistancePx = Math.round(Number(row[7])) || 0;
+
+        const metrics = {
+          totalBoops: Number(row[0]) || 0,
+          topCombo: Math.round(Number(row[1])) || 0,
+          totalEvents: Number(row[2]) || 0,
+          eyeDistancePx: totalEyeDistancePx,
+          featureToggles: {
+            eyeTracking: Number(row[3]) || 0,
+            googlyEyes: Number(row[4]) || 0,
+            partyMode: Number(row[5]) || 0,
+            treats: Number(row[6]) || 0
+          },
+          eventBreakdown: breakdownMap,
+          lastUpdated: new Date().toISOString()
+        };
 
         // Render as HTML
         const html = renderMetricsHTML(metrics);
@@ -277,7 +335,10 @@ function aggregateMetrics(events) {
  * Render metrics as HTML (for HTMX)
  */
 function renderMetricsHTML(metrics) {
-  const { totalBoops, totalEvents, featureToggles, topCombo, eventBreakdown, lastUpdated } = metrics;
+  const { totalBoops, totalEvents, eyeDistancePx, featureToggles, topCombo, eventBreakdown, lastUpdated } = metrics;
+
+  // Standard CSS pixels to estimated real-world distance (approx 3780 px per meter at 96 DPI)
+  const distanceMeters = (eyeDistancePx / 3780).toFixed(2);
 
   let html = `
     <div class="metric-row">
@@ -291,6 +352,10 @@ function renderMetricsHTML(metrics) {
     <div class="metric-row">
       <span class="metric-label">Max Boop Combo</span>
       <span class="metric-value">×${topCombo}</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">👀 Eyeball Distance Rolled</span>
+      <span class="metric-value">${distanceMeters} m <small style="font-size: 0.75rem; color: #888;">(${eyeDistancePx.toLocaleString()} px)</small></span>
     </div>
 
     <h3>🎮 Feature Toggles</h3>

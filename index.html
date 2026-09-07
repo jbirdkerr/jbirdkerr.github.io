@@ -923,6 +923,41 @@
             let lastPointerX = window.innerWidth / 2;
             let lastPointerY = window.innerHeight / 2;
 
+            // Eye movement distance tracking
+            let lastEyeLeftX = 0, lastEyeLeftY = 0;
+            let accumulatedEyeDistance = 0;
+            let lastEyeFlushTime = Date.now();
+
+            function recordEyeMovement(newX, newY) {
+                if (lastEyeLeftX !== 0 || lastEyeLeftY !== 0) {
+                    const delta = Math.hypot(newX - lastEyeLeftX, newY - lastEyeLeftY);
+                    if (delta > 0.5 && delta < 50) { // filter out jumps/toggles
+                        accumulatedEyeDistance += delta;
+                    }
+                }
+                lastEyeLeftX = newX;
+                lastEyeLeftY = newY;
+
+                // Flush every 10 seconds if moved more than 20 pixels
+                const now = Date.now();
+                if (now - lastEyeFlushTime > 10000 && accumulatedEyeDistance >= 20) {
+                    flushEyeDistance();
+                }
+            }
+
+            function flushEyeDistance() {
+                if (accumulatedEyeDistance >= 5) {
+                    captureEvent('eye_movement', {
+                        distance_px: Math.round(accumulatedEyeDistance)
+                    });
+                    accumulatedEyeDistance = 0;
+                    lastEyeFlushTime = Date.now();
+                }
+            }
+
+            window.addEventListener('beforeunload', flushEyeDistance);
+            window.addEventListener('pagehide', flushEyeDistance);
+
             let googlyActive = false;
             const eyeLeft = document.getElementById('eye-left');
             const eyeRight = document.getElementById('eye-right');
@@ -941,6 +976,9 @@
                     stageEl.classList.remove('tracking-active');
                     if (irisLeft) irisLeft.style.transform = 'translate(0px, 0px)';
                     if (irisRight) irisRight.style.transform = 'translate(0px, 0px)';
+                    flushEyeDistance();
+                    lastEyeLeftX = 0;
+                    lastEyeLeftY = 0;
                     captureEvent('feature_toggle', { feature: 'eye_tracking', enabled: false });
                     console.log("%c👀 Eyes returned to rest.", "color: #888;");
                 }
@@ -973,6 +1011,10 @@
                 const my = Math.sin(angle) * maxMoveY * intensity;
 
                 irisEl.style.transform = `translate(${mx}px, ${my}px)`;
+
+                if (irisEl === irisLeft) {
+                    recordEyeMovement(mx, my);
+                }
             }
 
             function updatePupilPosition(pupilEl, eyeEl, targetX, targetY) {

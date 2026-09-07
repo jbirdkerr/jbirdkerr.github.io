@@ -42,7 +42,7 @@ export default {
     // Route: GET /metrics (returns HTML for HTMX with edge caching)
     if (url.pathname === '/metrics' && request.method === 'GET') {
       const cache = caches.default;
-      const cacheKey = new Request(url.toString(), request);
+      const cacheKey = new Request(url.origin + url.pathname); // URL-only key, no request headers
       let cachedResponse = await cache.match(cacheKey);
 
       if (cachedResponse) {

@@ -603,7 +603,10 @@
         <div class="modal-content" id="modal-content">
             <button class="modal-close" onclick="document.getElementById('metrics-modal').classList.remove('active')">✕</button>
             <h2>🐶 BoopMaster 3000 Stats</h2>
-            <div id="metrics-container">
+            <div id="metrics-container"
+                hx-get="https://metrics-api.jbirdkerr.net/metrics"
+                hx-trigger="load, every 15s"
+                hx-swap="innerHTML">
                 <div class="loading" id="metrics-loading">📊 Loading metrics...</div>
             </div>
         </div>
@@ -663,12 +666,6 @@
             metricsToggle.addEventListener('click', (e) => {
                 e.preventDefault();
                 metricsModal.classList.add('active');
-                if (window.htmx) {
-                    window.htmx.ajax('GET', 'https://metrics-api.jbirdkerr.net/metrics', {
-                        target: '#metrics-container',
-                        indicator: '#metrics-loading'
-                    });
-                }
             });
 
             // Credits modal

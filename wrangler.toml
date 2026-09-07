@@ -1,0 +1,26 @@
+name = "jbirdkerr-metrics"
+account_id = "1dcd86d2743bff3ea34323e58ee7470f"
+workers_dev = true
+compatibility_date = "2024-08-14"
+main = "./metrics-worker/worker.js"
+
+[vars]
+POSTHOG_PROJECT_ID = "566829"
+
+[env.production]
+name = "jbirdkerr-metrics"
+routes = [
+  { pattern = "metrics-api.jbirdkerr.net", custom_domain = true }
+]
+
+[env.production.vars]
+POSTHOG_PROJECT_ID = "566829"
+
+[observability.logs]
+enabled = false
+head_sampling_rate = 1
+invocation_logs = true
+persist = true
+
+[observability.traces]
+enabled = false

@@ -1,37 +1,49 @@
 import json
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any
 from urllib.parse import urlparse
 
 from pyodide.http import pyfetch
-from workers import DurableObject, WorkerEntrypoint, Response
+from workers import DurableObject, Response, WorkerEntrypoint
 
 ALLOWED_ORIGINS = {
     "https://jbirdkerr.net",
     "https://www.jbirdkerr.net",
     "https://jbirdkerr.github.io",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost:8787",
 }
 
-METRICS_TTL = 10
+METRICS_TTL = 5
 CACHE_KEY = "metrics"
 REFRESH_ALARM_DELAY_MS = 100
 
 
-def cors_headers(origin: str | None) -> Dict[str, str]:
-    allowed = not origin or origin in ALLOWED_ORIGINS
+def get_origin(request) -> str | None:
+    headers = getattr(request, "headers", {})
+    if hasattr(headers, "get"):
+        return headers.get("origin") or headers.get("Origin")
+    return None
+
+
+def cors_headers(origin: str | None) -> dict[str, str]:
+    is_allowed = bool(origin and origin in ALLOWED_ORIGINS)
+    effective_origin = origin if is_allowed else "https://jbirdkerr.net"
     return {
-        "Access-Control-Allow-Origin": origin if allowed else "https://jbirdkerr.net",
+        "Access-Control-Allow-Origin": effective_origin,
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
         "Access-Control-Allow-Headers": (
-            "Content-Type, Authorization, HX-Request, HX-Current-URL, "
-            "HX-Target, HX-Trigger, HX-Trigger-Name"
+            "Content-Type, Authorization, X-Requested-With, "
+            "HX-Request, HX-Current-URL, HX-Target, HX-Trigger, HX-Trigger-Name, X-PostHog-Token"
         ),
         "Access-Control-Allow-Credentials": "true",
+        "Vary": "Origin, HX-Request",
     }
 
 
-async def fetch_metrics_from_posthog(key: str, project_id: str) -> Dict[str, Any]:
+async def fetch_metrics_from_posthog(key: str, project_id: str) -> dict[str, Any]:
     url = f"https://us.posthog.com/api/projects/{project_id}/query/"
     stats_query = {
         "query": {
@@ -119,8 +131,8 @@ class MetricsCache(DurableObject):
         )
 
     async def refresh(self):
-        key = self.env.get("POSTHOG_API_KEY")
-        project_id = self.env.get("POSTHOG_PROJECT_ID")
+        key = getattr(self.env, "POSTHOG_API_KEY", None)
+        project_id = getattr(self.env, "POSTHOG_PROJECT_ID", None)
         if not key or not project_id:
             raise RuntimeError("Missing PostHog configuration")
 
@@ -137,15 +149,8 @@ class MetricsCache(DurableObject):
         return metrics
 
     async def get_metrics(self):
-        if self.cached_metrics is None:
+        if not self.fresh():
             return await self.refresh()
-
-        alarm = await self.storage.getAlarm()
-        if not self.fresh() and alarm is None:
-            await self.storage.setAlarm(
-                int(time.time() * 1000) + REFRESH_ALARM_DELAY_MS
-            )
-
         return self.cached_metrics
 
     async def alarm(self, alarm_info=None):
@@ -161,7 +166,7 @@ class MetricsCache(DurableObject):
 class Default(WorkerEntrypoint):
     async def fetch(self, request):
         url = urlparse(request.url)
-        origin = request.headers.get("origin")
+        origin = get_origin(request)
         headers = cors_headers(origin)
 
         if origin and origin not in ALLOWED_ORIGINS and request.method != "OPTIONS":
@@ -184,7 +189,7 @@ class Default(WorkerEntrypoint):
                     headers={
                         **headers,
                         "Content-Type": "text/html; charset=UTF-8",
-                        "Cache-Control": "public, max-age=5, stale-while-revalidate=30",
+                        "Cache-Control": "no-cache, no-store, must-revalidate",
                     },
                 )
             except Exception as exc:
@@ -226,20 +231,61 @@ class Default(WorkerEntrypoint):
         host = "us-assets.i.posthog.com" if is_asset else "us.i.posthog.com"
         target = f"https://{host}{url.path}" + (f"?{url.query}" if url.query else "")
 
-        req_headers = dict(request.headers)
+        req_headers = {}
+        headers_obj = getattr(request, "headers", {})
+        if hasattr(headers_obj, "entries"):
+            for k, v in headers_obj.entries():
+                req_headers[k.lower()] = str(v)
+        elif hasattr(headers_obj, "items"):
+            for k, v in headers_obj.items():
+                req_headers[k.lower()] = str(v)
+
         req_headers["host"] = host
+
+        cf_ip = headers_obj.get("cf-connecting-ip") if hasattr(headers_obj, "get") else None
+        if cf_ip:
+            req_headers["x-forwarded-for"] = str(cf_ip)
+
+        for drop_header in ["content-length", "cf-ray", "cf-connecting-ip", "cf-visitor", "connection"]:
+            req_headers.pop(drop_header, None)
 
         body = None
         if request.method not in ("GET", "HEAD"):
-            body = await request.text()
+            if hasattr(request, "bytes"):
+                body = await request.bytes()
+            elif hasattr(request, "arrayBuffer"):
+                body = await request.arrayBuffer()
+            else:
+                body = await request.text()
 
         try:
             res = await pyfetch(
                 target, method=request.method, headers=req_headers, body=body
             )
 
-            res_headers = dict(res.headers)
+            res_headers = {}
+            if hasattr(res.headers, "entries"):
+                for k, v in res.headers.entries():
+                    res_headers[k.lower()] = str(v)
+            elif hasattr(res.headers, "items"):
+                for k, v in res.headers.items():
+                    res_headers[k.lower()] = str(v)
+
+            for drop in [
+                "content-encoding",
+                "content-length",
+                "transfer-encoding",
+                "access-control-allow-origin",
+                "access-control-allow-credentials",
+                "access-control-allow-methods",
+                "access-control-allow-headers",
+                "access-control-expose-headers",
+                "access-control-max-age",
+            ]:
+                res_headers.pop(drop, None)
+
             res_headers.update(cors)
+
             if is_asset:
                 res_headers["Cache-Control"] = "public, max-age=86400"
 
@@ -254,7 +300,7 @@ class Default(WorkerEntrypoint):
             )
 
 
-def render_metrics_html(metrics: Dict[str, Any]) -> str:
+def render_metrics_html(metrics: dict[str, Any]) -> str:
     distance = metrics.get("eyeDistancePx", 0)
     toggles = metrics.get("featureToggles", {})
     html = f"""

@@ -573,7 +573,8 @@
             api_host: 'https://metrics-api.jbirdkerr.net',
             ui_host: 'https://us.posthog.com',
             person_profiles: 'always',
-            cross_subdomain_cookie: false
+            cross_subdomain_cookie: false,
+            request_batching: false
         })
     </script>
     <script>
@@ -596,6 +597,9 @@
             metricsToggle.addEventListener('click', (e) => {
                 e.preventDefault();
                 metricsModal.classList.add('active');
+                if (window.htmx) {
+                    window.htmx.ajax('GET', 'https://metrics-api.jbirdkerr.net/metrics', '#metrics-container');
+                }
             });
             // Credits modal
             creditsToggle.addEventListener('click', () => {

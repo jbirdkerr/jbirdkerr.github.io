@@ -7,23 +7,27 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    const origin = request.headers.get('Origin');
+    const origin = request.headers.get('Origin') || request.headers.get('origin');
     const allowedOrigins = [
       'https://jbirdkerr.net',
       'https://www.jbirdkerr.net',
-      'https://jbirdkerr.github.io'
+      'https://jbirdkerr.github.io',
+      'http://localhost:8000',
+      'http://127.0.0.1:8000',
+      'http://localhost:8787'
     ];
 
-    // If an origin is passed by a browser and it's not allowed, block cross-origin access
-    const isAllowedOrigin = !origin || allowedOrigins.includes(origin);
-    const corsOrigin = isAllowedOrigin ? (origin || 'https://jbirdkerr.net') : 'https://jbirdkerr.net';
+    // If an origin is passed by a browser and it's allowed, echo it back; otherwise default to main site origin
+    const isAllowedOrigin = Boolean(origin && allowedOrigins.includes(origin));
+    const corsOrigin = isAllowedOrigin ? origin : 'https://jbirdkerr.net';
 
     // CORS headers
     const corsHeaders = {
       'Access-Control-Allow-Origin': corsOrigin,
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, HX-Request, HX-Current-URL, HX-Target, HX-Trigger, HX-Trigger-Name',
-      'Access-Control-Allow-Credentials': 'true'
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, HX-Request, HX-Current-URL, HX-Target, HX-Trigger, HX-Trigger-Name, X-PostHog-Token',
+      'Access-Control-Allow-Credentials': 'true',
+      'Vary': 'Origin, HX-Request'
     };
 
     // Reject unauthorized cross-origin requests from foreign browser domains
@@ -46,7 +50,15 @@ export default {
       let cachedResponse = await cache.match(cacheKey);
 
       if (cachedResponse) {
-        return cachedResponse;
+        const responseHeaders = new Headers(cachedResponse.headers);
+        Object.entries(corsHeaders).forEach(([key, val]) => {
+          responseHeaders.set(key, val);
+        });
+        return new Response(cachedResponse.body, {
+          status: cachedResponse.status,
+          statusText: cachedResponse.statusText,
+          headers: responseHeaders
+        });
       }
 
       try {
@@ -204,9 +216,11 @@ async function handlePostHogProxy(request, url, corsHeaders) {
 
   const headers = new Headers(request.headers);
   headers.set('host', targetHost);
-  if (request.headers.get('x-forwarded-for')) {
-    headers.set('x-forwarded-for', request.headers.get('x-forwarded-for'));
+  if (request.headers.get('cf-connecting-ip')) {
+    headers.set('x-forwarded-for', request.headers.get('cf-connecting-ip'));
   }
+
+  ['content-length', 'cf-ray', 'cf-connecting-ip', 'cf-visitor', 'connection'].forEach(h => headers.delete(h));
 
   const init = {
     method: request.method,
@@ -221,6 +235,15 @@ async function handlePostHogProxy(request, url, corsHeaders) {
   try {
     const response = await fetch(proxyUrl.toString(), init);
     const responseHeaders = new Headers(response.headers);
+
+    [
+      'access-control-allow-origin',
+      'access-control-allow-credentials',
+      'access-control-allow-methods',
+      'access-control-allow-headers',
+      'access-control-expose-headers',
+      'access-control-max-age'
+    ].forEach(h => responseHeaders.delete(h));
     
     // Set CORS origin and credentials
     Object.entries(corsHeaders).forEach(([key, val]) => {

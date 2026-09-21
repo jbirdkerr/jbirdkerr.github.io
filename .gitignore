@@ -2,3 +2,6 @@ local-docs/
 .env
 scratch/
 .aider*
+.pi/
+.wrangler/
+__pycache__/

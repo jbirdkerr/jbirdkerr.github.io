@@ -1,3 +1,4 @@
 local-docs/
 .env
 scratch/
+.aider*

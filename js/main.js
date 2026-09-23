@@ -5,7 +5,9 @@ posthog.init('phc_zugUWyUvq2VWid5q6XxqRtHnBXsoLDB9BhaaY6VxVuXJ', {
     ui_host: 'https://us.posthog.com',
     person_profiles: 'always',
     cross_subdomain_cookie: false,
-    request_batching: false,
+    request_batching: true,
+    batch_size: 15,          // Flushes immediately after 15 quick clicks
+    flush_interval_ms: 2000,  // Or flushes every 1 second max
     disable_session_recording: true
 });
 
@@ -23,27 +25,74 @@ function captureEvent(eventName, properties = {}) {
     const creditsToggle = document.getElementById('credits-toggle');
     const metricsModal = document.getElementById('metrics-modal');
     const creditsModal = document.getElementById('credits-modal');
-    // Metrics modal
-    metricsToggle.addEventListener('click', (e) => {
-        e.preventDefault();
+    let metricsPollInterval = null;
+
+    function openMetricsModal() {
+        if (typeof flushEyeDistance === 'function') {
+            flushEyeDistance();
+        }
         metricsModal.classList.add('active');
+        if (metricsPollInterval) {
+            clearInterval(metricsPollInterval);
+        }
         window.htmx.ajax('GET', 'https://metrics-api.jbirdkerr.net/metrics', '#metrics-container');
         metricsPollInterval = setInterval(() => {
+            if (document.hidden || !metricsModal.classList.contains('active')) {
+                return;
+            }
             window.htmx.ajax('GET', 'https://metrics-api.jbirdkerr.net/metrics', '#metrics-container');
         }, 5000);
+    }
+
+    function closeMetricsModal() {
+        metricsModal.classList.remove('active');
+        if (metricsPollInterval) {
+            clearInterval(metricsPollInterval);
+            metricsPollInterval = null;
+        }
+    }
+
+    function openCreditsModal() {
+        creditsModal.classList.add('active');
+    }
+
+    function closeCreditsModal() {
+        creditsModal.classList.remove('active');
+    }
+
+    // Modal triggers
+    metricsToggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        openMetricsModal();
     });
 
-    document.getElementById('metrics-modal').querySelector('.modal-close').addEventListener('click', () => {
-        clearInterval(metricsPollInterval);
-    });
-    // Credits modal
-    creditsToggle.addEventListener('click', () => {
-        creditsModal.classList.add('active');
-    });
+    const metricsCloseBtn = metricsModal.querySelector('.modal-close');
+    if (metricsCloseBtn) {
+        metricsCloseBtn.addEventListener('click', closeMetricsModal);
+    }
+
+    creditsToggle.addEventListener('click', openCreditsModal);
+    const creditsCloseBtn = creditsModal.querySelector('.modal-close');
+    if (creditsCloseBtn) {
+        creditsCloseBtn.addEventListener('click', closeCreditsModal);
+    }
+
     // Close modals on overlay click
     document.addEventListener('click', (e) => {
-        if (e.target.classList.contains('modal-overlay')) {
-            e.target.classList.remove('active');
+        if (e.target === metricsModal) {
+            closeMetricsModal();
+        } else if (e.target === creditsModal) {
+            closeCreditsModal();
+        }
+    });
+
+    // Pause polling when tab is hidden
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden && metricsPollInterval) {
+            clearInterval(metricsPollInterval);
+            metricsPollInterval = null;
+        } else if (!document.hidden && metricsModal.classList.contains('active')) {
+            openMetricsModal();
         }
     });
     /* ============================================================
@@ -254,9 +303,9 @@ function captureEvent(eventName, properties = {}) {
         }
         lastEyeLeftX = newX;
         lastEyeLeftY = newY;
-        // Flush every 10 seconds if moved more than 20 pixels
+        // Flush every 3 seconds if moved more than 10 pixels
         const now = Date.now();
-        if (now - lastEyeFlushTime > 10000 && accumulatedEyeDistance >= 20) {
+        if (now - lastEyeFlushTime > 3000 && accumulatedEyeDistance >= 10) {
             flushEyeDistance();
         }
     }
@@ -484,10 +533,14 @@ function captureEvent(eventName, properties = {}) {
             playBarkSound();
             captureEvent('bark', { trigger: 'key_w' });
         } else if (key === 'm') {
-            metricsModal.classList.toggle('active');
+            if (metricsModal.classList.contains('active')) {
+                closeMetricsModal();
+            } else {
+                openMetricsModal();
+            }
         } else if (key === 'escape') {
-            metricsModal.classList.remove('active');
-            creditsModal.classList.remove('active');
+            closeMetricsModal();
+            closeCreditsModal();
         }
     });
     /* Expose Global Helper API for Interactive Exploration */

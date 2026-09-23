@@ -9,9 +9,11 @@ And in pyproject.toml:
   dependencies = ["workers-runtime-sdk"]
 """
 
+import base64
+import gzip
 import json
 from datetime import datetime, timezone
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from pyodide.ffi import create_proxy
 from workers import Response, WorkerEntrypoint, fetch
@@ -134,15 +136,26 @@ async def proxy_posthog(request, url, env, cors_headers, ctx):
     # those aren't discrete "events" in the same shape. Confirm in your
     # Network tab which path your actual event captures use (a 200, not the
     # session-recording /s/ traffic) and add it here if it differs.
-    persistable_paths = {"/capture", "/capture/", "/batch", "/batch/", "/i/v0/e/", "/i/v0/e", "/e/", "/e"}
-    if (
-        request.method == "POST"
-        and not is_asset
-        and url.path in persistable_paths
-    ):
+    persistable_paths = {
+        "/capture",
+        "/capture/",
+        "/batch",
+        "/batch/",
+        "/i/v0/e/",
+        "/i/v0/e",
+        "/e/",
+        "/e",
+    }
+    print(
+        f"posthog proxy: method={request.method} path={url.path!r} "
+        f"is_asset={is_asset} persistable={url.path in persistable_paths}"
+    )
+    if request.method == "POST" and not is_asset and url.path in persistable_paths:
         try:
             payload_bytes = body if body is not None else b""
-            ctx.waitUntil(create_proxy(persist_posthog_payload(payload_bytes, env)))
+            ctx.waitUntil(
+                create_proxy(persist_posthog_payload(payload_bytes, env, url.query))
+            )
         except Exception as error:
             print(f"Unable to queue Supabase persistence: {error}")
 
@@ -163,20 +176,97 @@ async def proxy_posthog(request, url, env, cors_headers, ctx):
     return Response(response.body, status=response.status, headers=response_headers)
 
 
-async def persist_posthog_payload(payload_bytes, env):
+def decode_posthog_body(payload_bytes, query_string=None):
+    """Decode a PostHog capture payload into a Python dict/list.
+
+    Handles raw gzip bytes, direct JSON, form-encoded / base64 payloads,
+    and query string data without corrupting base64 characters.
+    """
+    if isinstance(payload_bytes, memoryview):
+        payload_bytes = bytes(payload_bytes)
+
+    # 1. Try direct gzip decompress
+    if payload_bytes:
+        try:
+            return json.loads(gzip.decompress(payload_bytes))
+        except Exception:
+            pass
+
+    # 2. Try direct JSON parse
+    if payload_bytes:
+        try:
+            return json.loads(payload_bytes)
+        except Exception:
+            pass
+
+    # 3. Try string representations from body or query string
+    candidates = []
+    if payload_bytes:
+        try:
+            candidates.append(payload_bytes.decode("utf-8").strip())
+        except UnicodeDecodeError:
+            try:
+                candidates.append(payload_bytes.decode("latin-1").strip())
+            except Exception:
+                pass
+
+    if query_string:
+        candidates.append(query_string.strip())
+
+    for text in candidates:
+        tokens = [text]
+        if "data=" in text:
+            # Extract the raw data parameter value without converting '+' into spaces
+            extracted = text.split("data=", 1)[1].split("&", 1)[0]
+            tokens.append(extracted)
+            tokens.append(parse_qs(text).get("data", [""])[0])
+
+        for token in tokens:
+            if not token:
+                continue
+
+            # Try token directly as JSON
+            try:
+                return json.loads(token)
+            except Exception:
+                pass
+
+            # Try URL-unquoted token as JSON
+            try:
+                unquoted = unquote(token)
+                return json.loads(unquoted)
+            except Exception:
+                pass
+
+            # Try Base64 (both verbatim and with spaces turned back to '+')
+            for b64_cand in [token, token.replace(" ", "+")]:
+                try:
+                    padded = b64_cand + "=" * (-len(b64_cand) % 4)
+                    decoded = base64.b64decode(padded)
+                    try:
+                        return json.loads(gzip.decompress(decoded))
+                    except Exception:
+                        pass
+                    try:
+                        return json.loads(decoded)
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+
+    return None
+
+
+async def persist_posthog_payload(payload_bytes, env, query_string=None):
     if not getattr(env, "SUPABASE_URL", None) or not getattr(
         env, "SUPABASE_SERVICE_ROLE_KEY", None
     ):
         print("Supabase environment variables are not configured")
         return
 
-    try:
-        # json.loads accepts bytes directly; this also naturally fails (and
-        # is caught below) for compressed bodies we can't parse as JSON,
-        # e.g. a gzip-encoded /i/v0/e/ payload we choose not to persist.
-        payload = json.loads(payload_bytes)
-    except (TypeError, ValueError):
-        print("PostHog payload was not valid JSON")
+    payload = decode_posthog_body(payload_bytes, query_string)
+    if payload is None:
+        print("PostHog payload was not valid JSON or decodable data= form")
         return
 
     events = normalize_posthog_payload(payload)
@@ -218,9 +308,11 @@ def normalize_posthog_payload(payload):
                 "event": event,
                 "properties": properties if isinstance(properties, dict) else {},
                 "occurred_at": item.get("timestamp"),
-                "distinct_id": item.get("distinct_id")
-                if isinstance(item.get("distinct_id"), str)
-                else None,
+                "distinct_id": (
+                    item.get("distinct_id")
+                    if isinstance(item.get("distinct_id"), str)
+                    else None
+                ),
             }
         )
     return events
@@ -240,7 +332,7 @@ async def handle_metrics(env, cors_headers):
         summary_response = await supabase_request(env, "/rest/v1/site_metrics?select=*")
         events_response = await supabase_request(
             env,
-            "/rest/v1/site_event_counts?select=event,count&order=count.desc&limit=10",
+            "/rest/v1/site_event_counts?select=event,count&order=count.desc&limit=30",
         )
 
         if not summary_response.ok or not events_response.ok:
@@ -260,7 +352,7 @@ async def handle_metrics(env, cors_headers):
             headers={
                 **cors_headers,
                 "Content-Type": "text/html; charset=utf-8",
-                "Cache-Control": "no-store",
+                "Cache-Control": "public, max-age=2, s-maxage=3, stale-while-revalidate=5",
                 "X-Metrics-Generated": updated_at,
             },
         )
@@ -293,50 +385,47 @@ def render_metrics_html(summary, event_rows):
     max_boop_combo = number(summary.get("max_boop_combo"))
     total_events = number(summary.get("total_events"))
     eye_tracking_toggles = number(summary.get("eye_tracking_toggles"))
-    googly_eye_toggles = number(summary.get("googly_eyes_toggles"))
+    googly_eye_toggles = number(
+        summary.get("googly_eyes_toggles", summary.get("googly_eye_toggles"))
+    )
     party_mode_toggles = number(summary.get("party_mode_toggles"))
     treat_showers = number(summary.get("treat_showers"))
     total_eye_distance = number(summary.get("total_eye_distance"))
 
-    event_html = "".join(
-        f"<tr><td>{escape_html(row.get('event'))}</td>"
-        f"<td>{fmt(number(row.get('count')))}</td></tr>"
-        for row in event_rows
-    )
+    distance_m = total_eye_distance / 3780
 
     updated_at = summary.get("updated_at")
     if updated_at:
         try:
-            updated = datetime.fromisoformat(updated_at.replace("Z", "+00:00")).strftime(
-                "%I:%M:%S %p"
-            )
+            updated = datetime.fromisoformat(
+                updated_at.replace("Z", "+00:00")
+            ).strftime("%H:%M:%S")
         except ValueError:
             updated = updated_at
     else:
-        updated = "unknown"
+        updated = "—"
 
-    return f"""
-    <div class="metrics">
-      <div class="metrics-grid">
-        <div class="metric"><strong>{fmt(total_boops)}</strong><span>Boops</span></div>
-        <div class="metric"><strong>{fmt(max_boop_combo)}</strong><span>Max Boop Combo</span></div>
-        <div class="metric"><strong>{fmt(total_events)}</strong><span>Total Events</span></div>
-        <div class="metric"><strong>{fmt(eye_tracking_toggles)}</strong><span>Eye Tracking</span></div>
-        <div class="metric"><strong>{fmt(googly_eye_toggles)}</strong><span>Googly Eyes</span></div>
-        <div class="metric"><strong>{fmt(party_mode_toggles)}</strong><span>Party Mode</span></div>
-        <div class="metric"><strong>{fmt(treat_showers)}</strong><span>Treat Showers</span></div>
-        <div class="metric"><strong>{fmt(total_eye_distance)}</strong><span>Eye Distance</span></div>
-      </div>
-
-      <h3>Top Events</h3>
-      <table class="metrics-events">
-        <thead><tr><th>Event</th><th>Count</th></tr></thead>
-        <tbody>{event_html}</tbody>
-      </table>
-
-      <div class="metrics-updated">🟢 Updated {escape_html(updated)}</div>
-    </div>
+    html = f"""
+    <div class="metric-row"><span class="metric-label">Total Boops</span><span class="metric-value">{fmt(total_boops)}</span></div>
+    <div class="metric-row"><span class="metric-label">Total Events Tracked</span><span class="metric-value">{fmt(total_events)}</span></div>
+    <div class="metric-row"><span class="metric-label">Max Boop Combo</span><span class="metric-value">×{fmt(max_boop_combo)}</span></div>
+    <div class="metric-row"><span class="metric-label">👀 Eyeball Distance Rolled</span><span class="metric-value">{distance_m:.2f} m <small>({total_eye_distance:,.0f} px)</small></span></div>
+    <h3>🎮 Feature Toggles</h3><div class="feature-grid">
+      <div class="feature-box"><div class="feature-name">Eye Tracking</div><div class="feature-count">{fmt(eye_tracking_toggles)}</div></div>
+      <div class="feature-box"><div class="feature-name">Googly Eyes</div><div class="feature-count">{fmt(googly_eye_toggles)}</div></div>
+      <div class="feature-box"><div class="feature-name">Party Mode</div><div class="feature-count">{fmt(party_mode_toggles)}</div></div>
+      <div class="feature-box"><div class="feature-name">Treats</div><div class="feature-count">{fmt(treat_showers)}</div></div>
+    </div><h3>📈 Event Breakdown</h3>
     """
+    custom_events = [
+        r for r in event_rows if (r.get("event") or "").strip() and not (r.get("event") or "").strip().startswith("$")
+    ][:10]
+    for row in custom_events:
+        event = escape_html(row.get("event") or "")
+        count = fmt(number(row.get("count")))
+        html += f'<div class="metric-row"><span class="metric-label">{event}</span><span class="metric-value">{count}</span></div>'
+    html += f'<div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(0,212,255,.2);font-size:.8rem;color:#666;">Last updated: {escape_html(updated)}</div>'
+    return html
 
 
 def number(value):

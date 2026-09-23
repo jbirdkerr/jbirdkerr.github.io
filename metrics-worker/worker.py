@@ -22,6 +22,12 @@ ALLOWED_ORIGINS = {
     "https://jbirdkerr.net",
     "https://www.jbirdkerr.net",
     "https://jbirdkerr.github.io",
+    "http://localhost:8000",
+    "http://localhost:8080",
+    "http://localhost:3000",
+    "http://127.0.0.1:8000",
+    "http://127.0.0.1:5500",
+    "http://localhost:8787",
 }
 
 POSTHOG_API_HOST = "https://us.i.posthog.com"
@@ -136,21 +142,19 @@ async def proxy_posthog(request, url, env, cors_headers, ctx):
     # those aren't discrete "events" in the same shape. Confirm in your
     # Network tab which path your actual event captures use (a 200, not the
     # session-recording /s/ traffic) and add it here if it differs.
-    persistable_paths = {
-        "/capture",
-        "/capture/",
-        "/batch",
-        "/batch/",
-        "/i/v0/e/",
-        "/i/v0/e",
-        "/e/",
-        "/e",
-    }
+    persistable = (
+        url.path.startswith("/i/v0/e")
+        or url.path.startswith("/i/v0/batch")
+        or url.path.startswith("/batch")
+        or url.path.startswith("/capture")
+        or url.path.startswith("/e")
+        or url.path.startswith("/engage")
+    )
     print(
         f"posthog proxy: method={request.method} path={url.path!r} "
-        f"is_asset={is_asset} persistable={url.path in persistable_paths}"
+        f"is_asset={is_asset} persistable={persistable}"
     )
-    if request.method == "POST" and not is_asset and url.path in persistable_paths:
+    if request.method == "POST" and not is_asset and persistable:
         try:
             payload_bytes = body if body is not None else b""
             ctx.waitUntil(
@@ -167,11 +171,22 @@ async def proxy_posthog(request, url, env, cors_headers, ctx):
         redirect="follow",
     )
 
-    response_headers = dict(response.headers)
-    response_headers.update(cors_headers)
+    response_headers = {}
+    for k, v in dict(response.headers).items():
+        k_lower = k.lower()
+        if not k_lower.startswith("access-control-") and k_lower not in (
+            "content-encoding",
+            "content-length",
+            "transfer-encoding",
+        ):
+            response_headers[k] = v
 
     if is_asset:
+        response_headers["Access-Control-Allow-Origin"] = "*"
+        response_headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
         response_headers["Cache-Control"] = "public, max-age=86400"
+    else:
+        response_headers.update(cors_headers)
 
     return Response(response.body, status=response.status, headers=response_headers)
 
@@ -290,15 +305,24 @@ async def persist_posthog_payload(payload_bytes, env, query_string=None):
 
 
 def normalize_posthog_payload(payload):
-    if isinstance(payload, dict) and isinstance(payload.get("batch"), list):
-        raw_events = payload["batch"]
-    elif isinstance(payload, dict) and payload.get("event"):
-        raw_events = [payload]
+    if isinstance(payload, list):
+        raw_events = payload
+    elif isinstance(payload, dict):
+        if isinstance(payload.get("batch"), list):
+            raw_events = payload["batch"]
+        elif isinstance(payload.get("data"), list):
+            raw_events = payload["data"]
+        elif payload.get("event"):
+            raw_events = [payload]
+        else:
+            raw_events = []
     else:
         raw_events = []
 
     events = []
     for item in raw_events:
+        if not isinstance(item, dict):
+            continue
         event = item.get("event")
         if not isinstance(event, str):
             continue

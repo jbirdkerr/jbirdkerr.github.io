@@ -5,10 +5,7 @@ posthog.init('phc_zugUWyUvq2VWid5q6XxqRtHnBXsoLDB9BhaaY6VxVuXJ', {
     ui_host: 'https://us.posthog.com',
     person_profiles: 'always',
     cross_subdomain_cookie: false,
-    request_batching: true,
-    batch_size: 15,          // Flushes immediately after 15 quick clicks
-    flush_interval_ms: 2000,  // Or flushes every 1 second max
-    disable_session_recording: true
+    request_batching: true
 });
 
 function captureEvent(eventName, properties = {}) {

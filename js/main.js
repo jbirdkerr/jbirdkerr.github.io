@@ -551,6 +551,34 @@ function captureEvent(eventName, properties = {}) {
         return partyActive;
     }
     /* ============================================================
+       TREAT SHOWER SYSTEM
+       ============================================================ */
+    function giveTreat() {
+        const treats = ["🥩", "🍖", "🥓", "🍗", "🧀", "🌭", "🍪"];
+        playBoopSound(1.4);
+        setTimeout(() => playBarkSound(), 250);
+        captureEvent('treat_shower', { trigger: 'treat_command' });
+
+        for (let i = 0; i < 16; i++) {
+            setTimeout(() => {
+                const x = window.innerWidth * 0.15 + Math.random() * (window.innerWidth * 0.7);
+                const y = window.innerHeight * 0.2 + Math.random() * (window.innerHeight * 0.6);
+                const p = document.createElement('div');
+                p.className = 'floating-particle';
+                p.textContent = treats[Math.floor(Math.random() * treats.length)];
+                p.style.left = `${x}px`;
+                p.style.top = `${y}px`;
+                p.style.setProperty('--dx', `${(Math.random() - 0.5) * 100}px`);
+                p.style.setProperty('--dy', `${-80 - Math.random() * 80}px`);
+                p.style.setProperty('--rot', `${(Math.random() - 0.5) * 180}deg`);
+                document.body.appendChild(p);
+                setTimeout(() => p.remove(), 1200);
+            }, i * 45);
+        }
+        return "🍖 Treats delivered to Henry! Good boy!";
+    }
+
+    /* ============================================================
        KEYBOARD SHORTCUTS & SECRET COMMANDS
        ============================================================ */
     window.addEventListener('keydown', (e) => {
@@ -564,6 +592,8 @@ function captureEvent(eventName, properties = {}) {
             toggleGooglyEyes();
         } else if (key === 'p') {
             togglePartyMode();
+        } else if (key === 't') {
+            giveTreat();
         } else if (key === 'w') {
             playBarkSound();
             captureEvent('bark', { trigger: 'key_w' });
@@ -584,8 +614,19 @@ function captureEvent(eventName, properties = {}) {
         bark: () => playBarkSound(),
         toggleEyes: (s) => toggleEyeTracking(s),
         toggleGoogly: (s) => toggleGooglyEyes(s),
-        party: (s) => togglePartyMode(s)
+        party: (s) => togglePartyMode(s),
+        treat: () => giveTreat(),
+        treats: () => giveTreat()
     };
+    window.boop = () => triggerBoop();
+    window.bark = () => playBarkSound();
+    window.treat = () => giveTreat();
+    window.treats = () => giveTreat();
+    window.Treats = () => giveTreat();
+    window.party = (s) => togglePartyMode(s);
+    window.eyes = (s) => toggleEyeTracking(s);
+    window.googly = (s) => toggleGooglyEyes(s);
+
     console.log("%c🐶 Woof! Henry Beard Interactive Canvas Ready.", "color: #00d4ff; font-weight: bold; font-size: 1.1rem;");
-    console.log("%cHotkeys: [B] Boop • [E] Toggle Eyes • [G] Googly Eyes • [P] Party Mode • [W] Woof • [M] Metrics", "color: #aaa;");
+    console.log("%cHotkeys: [B] Boop • [E] Toggle Eyes • [G] Googly Eyes • [P] Party Mode • [T] Treats • [W] Woof • [M] Metrics", "color: #aaa;");
 })();

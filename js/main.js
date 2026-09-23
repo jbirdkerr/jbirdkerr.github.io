@@ -87,15 +87,14 @@ function captureEvent(eventName, properties = {}) {
     });
 
     // Format metrics timestamps into local browser timezone
-    function localizeMetricsTimestamp() {
-        const container = document.getElementById('metrics-container');
+    function localizeMetricsTimestamp(containerEl) {
+        const container = containerEl || document.getElementById('metrics-container');
         if (!container) return;
         const timeEls = container.querySelectorAll('.metrics-timestamp');
         timeEls.forEach((timeEl) => {
-            let utcStr = timeEl.getAttribute('data-utc') || timeEl.dataset.utc;
+            const utcStr = timeEl.getAttribute('data-utc') || timeEl.dataset.utc;
             if (!utcStr || utcStr === '—' || utcStr === 'unknown') return;
 
-            // Normalize UTC string for Date parser
             let normalized = utcStr.trim().replace(' ', 'T');
             if (!normalized.endsWith('Z') && !/[+-]\d{2}(:\d{2})?$/.test(normalized)) {
                 normalized += 'Z';
@@ -108,21 +107,22 @@ function captureEvent(eventName, properties = {}) {
                     second: '2-digit',
                     hour12: false
                 });
+                timeEl.removeAttribute('data-utc');
             }
         });
     }
 
-    const metricsContainer = document.getElementById('metrics-container');
-    if (metricsContainer) {
-        const observer = new MutationObserver(() => {
-            localizeMetricsTimestamp();
-        });
-        observer.observe(metricsContainer, { childList: true, subtree: true });
-    }
+    document.addEventListener('htmx:afterSwap', (e) => {
+        if (e.target && (e.target.id === 'metrics-container' || e.target.querySelector('#metrics-container'))) {
+            localizeMetricsTimestamp(e.target);
+        }
+    });
 
-    document.addEventListener('htmx:afterSwap', localizeMetricsTimestamp);
-    document.addEventListener('htmx:afterSettle', localizeMetricsTimestamp);
-    document.addEventListener('htmx:load', localizeMetricsTimestamp);
+    document.addEventListener('htmx:afterSettle', (e) => {
+        if (e.target && (e.target.id === 'metrics-container' || e.target.querySelector('#metrics-container'))) {
+            localizeMetricsTimestamp(e.target);
+        }
+    });
 
     // Pause polling when tab is hidden
     document.addEventListener('visibilitychange', () => {

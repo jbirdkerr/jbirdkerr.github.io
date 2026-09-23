@@ -87,22 +87,42 @@ function captureEvent(eventName, properties = {}) {
     });
 
     // Format metrics timestamps into local browser timezone
-    document.addEventListener('htmx:afterSwap', (e) => {
-        if (e.detail && e.detail.target && e.detail.target.id === 'metrics-container') {
-            const timeEl = e.detail.target.querySelector('.metrics-timestamp');
-            if (timeEl && timeEl.dataset.utc && timeEl.dataset.utc !== '—') {
-                const date = new Date(timeEl.dataset.utc);
-                if (!isNaN(date.getTime())) {
-                    timeEl.textContent = date.toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                        hour12: false
-                    });
-                }
+    function localizeMetricsTimestamp() {
+        const container = document.getElementById('metrics-container');
+        if (!container) return;
+        const timeEls = container.querySelectorAll('.metrics-timestamp');
+        timeEls.forEach((timeEl) => {
+            let utcStr = timeEl.getAttribute('data-utc') || timeEl.dataset.utc;
+            if (!utcStr || utcStr === '—' || utcStr === 'unknown') return;
+
+            // Normalize UTC string for Date parser
+            let normalized = utcStr.trim().replace(' ', 'T');
+            if (!normalized.endsWith('Z') && !/[+-]\d{2}(:\d{2})?$/.test(normalized)) {
+                normalized += 'Z';
             }
-        }
-    });
+            const date = new Date(normalized);
+            if (!isNaN(date.getTime())) {
+                timeEl.textContent = date.toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+            }
+        });
+    }
+
+    const metricsContainer = document.getElementById('metrics-container');
+    if (metricsContainer) {
+        const observer = new MutationObserver(() => {
+            localizeMetricsTimestamp();
+        });
+        observer.observe(metricsContainer, { childList: true, subtree: true });
+    }
+
+    document.addEventListener('htmx:afterSwap', localizeMetricsTimestamp);
+    document.addEventListener('htmx:afterSettle', localizeMetricsTimestamp);
+    document.addEventListener('htmx:load', localizeMetricsTimestamp);
 
     // Pause polling when tab is hidden
     document.addEventListener('visibilitychange', () => {

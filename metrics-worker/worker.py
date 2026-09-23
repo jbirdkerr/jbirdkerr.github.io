@@ -394,7 +394,7 @@ def render_metrics_html(summary, event_rows):
 
     distance_m = total_eye_distance / 3780
 
-    raw_updated_at = summary.get("updated_at") or ""
+    raw_updated_at = summary.get("updated_at") or datetime.now(timezone.utc).isoformat()
     updated_at = summary.get("updated_at")
     if updated_at:
         try:

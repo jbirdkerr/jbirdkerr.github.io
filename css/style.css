@@ -81,7 +81,7 @@ body.party-mode {
 }
 #socket-left {
     left: 40.5%;
-    top: 20.8%;
+    top: 21.6%;
     width: 8.0%;
     height: 4.0%;
     border-radius: 50% 50% 45% 45% / 60% 60% 40% 40%;
@@ -161,7 +161,7 @@ body.party-mode {
 }
 #eye-left {
     left: 39.6%;
-    top: 18.7%;
+    top: 19.7%;
     transform: rotate(2deg);
 }
 #eye-right {

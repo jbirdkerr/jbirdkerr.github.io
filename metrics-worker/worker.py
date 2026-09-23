@@ -394,6 +394,7 @@ def render_metrics_html(summary, event_rows):
 
     distance_m = total_eye_distance / 3780
 
+    raw_updated_at = summary.get("updated_at") or ""
     updated_at = summary.get("updated_at")
     if updated_at:
         try:
@@ -424,7 +425,7 @@ def render_metrics_html(summary, event_rows):
         event = escape_html(row.get("event") or "")
         count = fmt(number(row.get("count")))
         html += f'<div class="metric-row"><span class="metric-label">{event}</span><span class="metric-value">{count}</span></div>'
-    html += f'<div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(0,212,255,.2);font-size:.8rem;color:#666;">Last updated: {escape_html(updated)}</div>'
+    html += f'<div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(0,212,255,.2);font-size:.8rem;color:#666;">Last updated: <span class="metrics-timestamp" data-utc="{escape_html(raw_updated_at)}">{escape_html(updated)}</span></div>'
     return html
 
 

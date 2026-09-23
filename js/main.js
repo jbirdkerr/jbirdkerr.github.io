@@ -86,6 +86,24 @@ function captureEvent(eventName, properties = {}) {
         }
     });
 
+    // Format metrics timestamps into local browser timezone
+    document.addEventListener('htmx:afterSwap', (e) => {
+        if (e.detail && e.detail.target && e.detail.target.id === 'metrics-container') {
+            const timeEl = e.detail.target.querySelector('.metrics-timestamp');
+            if (timeEl && timeEl.dataset.utc && timeEl.dataset.utc !== '—') {
+                const date = new Date(timeEl.dataset.utc);
+                if (!isNaN(date.getTime())) {
+                    timeEl.textContent = date.toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false
+                    });
+                }
+            }
+        }
+    });
+
     // Pause polling when tab is hidden
     document.addEventListener('visibilitychange', () => {
         if (document.hidden && metricsPollInterval) {

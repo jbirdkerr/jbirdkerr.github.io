@@ -1,89 +1,200 @@
-# jbirdkerr.github.io & Metrics Worker API
+# jbirdkerr.net & Metrics Infrastructure
 
-This repository contains the personal website hosted on **GitHub Pages** along with a **Cloudflare Worker** service (`metrics-api.jbirdkerr.net`) that proxies PostHog analytics for event capture and live metric rendering.
-
----
-
-## 🛠️ Components
-
-### 1. GitHub Pages Site
-- Static website files served from root (`index.html`).
-- Automated deployment to GitHub Pages via GitHub Actions (`.github/workflows/static.yml`).
-
-### 2. PostHog Metrics Worker (`metrics-worker/`)
-- A Cloudflare Worker deployed to `https://metrics-api.jbirdkerr.net`.
-- Built as an ES Module worker (`metrics-worker/worker.js`).
-- Proxies PostHog analytics without exposing sensitive API keys to the browser, and avoids client-side ad-blockers.
+Personal interactive website hosted on **GitHub Pages** with a real-time event analytics and persistence pipeline powered by **Cloudflare Workers (Python)**, **Supabase (PostgreSQL)**, and **PostHog**.
 
 ---
 
-## 🛰️ Worker API Routes
+## 🏗️ System Architecture
 
-| Method | Route | Description |
-| :--- | :--- | :--- |
-| `GET` | `/metrics` | Fetches recent events from PostHog, aggregates totals, and returns HTML for HTMX integration. |
-| `POST` | `/capture` | Ingests client analytics events and forwards them to PostHog (`https://us.i.posthog.com/capture/`). |
-| `GET` | `/static/*` | Proxies PostHog JS SDK static assets (`array.js`) to bypass ad-blockers. |
-| `GET` | `/health` | Health check endpoint returning `{"status": "ok"}`. |
+```mermaid
+flowchart TD
+    subgraph Client["🌐 Browser / Client (GitHub Pages)"]
+        UI["Interactive Henry Canvas\n(Boop, Bark, Eyes, Party, Treats)"]
+        PH_SDK["PostHog JS SDK\n(Batched Event Capture)"]
+        HTMX["HTMX Dashboard\n(5s Polling + Visibility Aware)"]
+    end
 
----
+    subgraph CF["☁️ Cloudflare Edge (metrics-api.jbirdkerr.net)"]
+        Worker["Python Worker\n(metrics-worker/worker.py)"]
+        EdgeCache[("Cloudflare Edge Cache\n- 3s /metrics cache\n- 24h static asset cache")]
+    end
 
-## 🔐 Required Secrets & Environment Variables
+    subgraph Storage["⚡ Supabase (PostgreSQL)"]
+        RPC["RPC: record_site_events()"]
+        T_Metrics[("public.site_metrics\n(Singleton totals & combos)")]
+        T_Counts[("public.site_event_counts\n(Top event breakdown)")]
+        T_Events[("public.site_events\n(Raw audit log)")]
+    end
 
-### 1. Environment Variables (`wrangler.toml`)
-* `POSTHOG_PROJECT_ID`: Your PostHog Project ID (e.g. `566829`).
+    subgraph PostHog["📊 PostHog Cloud"]
+        PH_API["PostHog Ingestion API\n(us.i.posthog.com)"]
+        PH_Assets["PostHog CDN\n(us-assets.i.posthog.com)"]
+    end
 
-### 2. Cloudflare Secrets (Uploaded via CLI)
+    %% Client Interactions
+    UI -->|Triggers events| PH_SDK
+    UI -->|Opens Stats modal| HTMX
 
-| Secret Name | Key Type | Purpose | How to generate in PostHog |
-| :--- | :--- | :--- | :--- |
-| `POSTHOG_API_KEY` | Personal API Key (`phx_...`) | Reading project events (`GET /metrics`). | **Account Settings** -> **Personal API Keys** -> Create key with `read:events` scope. |
-| `POSTHOG_PROJECT_KEY` | Project API Key (`phc_...`) | Ingesting analytics events (`POST /capture`). | **Project Settings** -> **Project API Key**. |
+    %% Ingestion Flow
+    PH_SDK -->|POST /i/v0/e/ or /batch| Worker
+    Worker -->|1. Forward original payload| PH_API
+    Worker -->|2. Async persist via ctx.waitUntil| RPC
+    RPC --> T_Metrics
+    RPC --> T_Counts
+    RPC --> T_Events
 
-### 3. GitHub Repository Secrets (For CI/CD Auto-Deploy)
+    %% Metrics Query Flow
+    HTMX -->|GET /metrics| EdgeCache
+    EdgeCache -->|Cache Miss| Worker
+    Worker -->|SELECT site_metrics + site_event_counts| Storage
+    Worker -.->|Rendered HTML with data-utc| HTMX
 
-Add this secret under **Settings** -> **Secrets and variables** -> **Actions** in your GitHub repository:
-
-| Secret Name | Description |
-| :--- | :--- |
-| `CLOUDFLARE_API_TOKEN` | Cloudflare API Token with Workers deployment permissions (allows GitHub Actions to run `wrangler deploy`). |
-
-## 🚀 Setup & Deployment
-
-### 1. Add Secrets to Cloudflare Workers
-
-Run the following commands in your terminal to store the secrets securely in Cloudflare:
-
-```bash
-# Upload Personal API Key (phx_...) for reading metrics
-npx wrangler secret put POSTHOG_API_KEY --env production
-
-# Upload Project API Key (phc_...) for sending/ingesting events
-npx wrangler secret put POSTHOG_PROJECT_KEY --env production
+    %% Asset Proxying
+    PH_SDK -.->|GET /static/array.js| Worker
+    Worker -.->|Proxy + CORS sanitize| PH_Assets
 ```
 
-### 2. Deploy Worker to Cloudflare
+---
 
-Deploy the worker and custom domain route (`metrics-api.jbirdkerr.net`):
+## 🔄 Metrics Flow & Sequence
+
+### 1. Event Capture & Dual Ingestion Pipeline
+
+When a user interacts with the canvas (boops the snoot, rolls the eyes, engages party mode, or showers treats), events are captured and written to both PostHog and Supabase in parallel:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as 👤 Visitor
+    participant Browser as 🌐 Browser (js/main.js)
+    participant Worker as ☁️ Cloudflare Worker
+    participant PostHog as 📊 PostHog Cloud
+    participant Supabase as ⚡ Supabase (PostgreSQL)
+
+    User->>Browser: Boops Snoot / Triggers Action
+    Note over Browser: Plays WebAudio SFX & Spawns Particles (0ms)
+    Browser->>Browser: PostHog SDK buffers & batches payload
+    Browser->>Worker: POST /i/v0/e/ (JSON or gzip/base64 payload)
+    
+    par Forward to PostHog
+        Worker->>PostHog: POST https://us.i.posthog.com/i/v0/e/
+        PostHog-->>Worker: 200 OK
+    and Persist to Supabase (Background)
+        Worker->>Worker: Decode & normalize payload (JSON/Gzip/Base64)
+        Worker->>Supabase: POST /rest/v1/rpc/record_site_events
+        Note over Supabase: Atomic transaction updates:<br/>1. public.site_events (insert log)<br/>2. public.site_event_counts (upsert count)<br/>3. public.site_metrics (increment totals & combos)
+        Supabase-->>Worker: 200 OK (Updated metrics JSON)
+    end
+    
+    Worker-->>Browser: 200 OK
+```
+
+### 2. Live Dashboard Rendering Flow
+
+When the metrics modal is opened, HTMX queries the Cloudflare Worker which retrieves the latest metrics from Supabase:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as 👤 Visitor
+    participant Modal as 📊 Metrics Modal (HTMX)
+    participant Cache as ⚡ Edge Cache
+    participant Worker as ☁️ Worker (/metrics)
+    participant DB as ⚡ Supabase Tables
+
+    User->>Modal: Clicks "📊 Metrics" or presses [M]
+    Note over Modal: Immediately flushes pending eye distance
+    Modal->>Cache: GET https://metrics-api.jbirdkerr.net/metrics
+    
+    alt Cache Hit (within 3 seconds)
+        Cache-->>Modal: Return cached HTML response
+    else Cache Miss
+        Cache->>Worker: Invoke handle_metrics()
+        par Query Summary & Events
+            Worker->>DB: GET /rest/v1/site_metrics?select=*
+            DB-->>Worker: Summary row JSON
+        and Query Event Breakdown
+            Worker->>DB: GET /rest/v1/site_event_counts?order=count.desc&limit=30
+            DB-->>Worker: Event counts JSON
+        end
+        Worker->>Worker: Filter out internal ($*) events & render HTML
+        Worker-->>Cache: HTML response (Cache-Control: s-maxage=3)
+        Cache-->>Modal: Swaps HTML into #metrics-container
+    end
+
+    Note over Modal: JavaScript converts UTC timestamp to visitor's local timezone
+```
+
+---
+
+## 📁 Repository Structure
+
+```
+.
+├── index.html                   # Clean, semantic HTML skeleton
+├── css/
+│   └── style.css                # All layout, animations, modals & retro styles
+├── js/
+│   └── main.js                  # Audio synthesis, particle engine, tracking & UI logic
+├── img/
+│   ├── henrybeard.png           # Main interactive dog photo
+│   └── henrybeard.jpg           # High-res photo source
+├── metrics-worker/
+│   ├── worker.py                # Cloudflare Python Worker (PostHog proxy + Supabase metrics)
+│   ├── pyproject.toml           # Python worker runtime configuration
+│   └── wrangler.toml            # Cloudflare Worker deployment settings
+└── supabase/
+    ├── migrations/              # PostgreSQL schema & RPC function migrations
+    └── config.toml              # Supabase local & remote configuration
+```
+
+---
+
+## 🛰️ Worker API Endpoints
+
+| Method | Endpoint | Description | Caching Strategy |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/metrics` | Fetches aggregated statistics from Supabase and returns styled HTML for HTMX. | `public, max-age=2, s-maxage=3` (Cloudflare edge cached) |
+| `POST` | `/i/v0/e/`, `/batch` | Proxies analytics captures to PostHog and persists events to Supabase via RPC. | `no-store` |
+| `GET` | `/static/*`, `/array/*` | Proxies PostHog JavaScript SDK static scripts to avoid ad-blocker issues. | `public, max-age=86400` (24h cache, CORS: `*`) |
+| `GET` | `/health` | Service health check returning UTC ISO timestamp. | `no-store` |
+| `OPTIONS` | `*` | Dynamic CORS preflight handler reflecting allowed origins and headers. | Handled via preflight headers |
+
+---
+
+## 🔐 Environment Variables & Secrets
+
+### Cloudflare Worker Configuration (`wrangler.toml`)
+
+* `POSTHOG_PROJECT_ID`: PostHog Project ID.
+* `SUPABASE_URL`: Target Supabase project REST URL (`https://<project-ref>.supabase.co`).
+
+### Cloudflare Worker Secrets (CLI Upload)
+
+Store the private database access token securely in Cloudflare:
+
+```bash
+# Production Supabase Service Role Key (used for backend RPC and queries)
+npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY --env production
+```
+
+---
+
+## 🚀 Deployment
+
+### 1. Static Website (GitHub Pages)
+Pushes to the `main` branch automatically build and publish static assets (`index.html`, `css/`, `js/`, `img/`) to GitHub Pages via GitHub Actions (`.github/workflows/static.yml`).
+
+### 2. Cloudflare Worker Deployment
+Deploy the Python worker to Cloudflare Workers with custom domain routing:
 
 ```bash
 npx wrangler deploy --env production
 ```
 
----
-
-## 💻 Local Development
-
-Create a `.dev.vars` file in the root directory for local testing with `wrangler dev`:
-
-```env
-POSTHOG_PROJECT_ID=566829
-POSTHOG_API_KEY=phx_your_personal_key_here
-POSTHOG_PROJECT_KEY=phc_your_project_key_here
-```
-
-Start the local worker dev server:
-
-```bash
-npx wrangler dev
-```
+### 3. Supabase Database Setup
+Run the migration script in [`supabase/migrations/20260923042823_01-initial-schema.sql`](supabase/migrations/20260923042823_01-initial-schema.sql) in your Supabase SQL Editor to establish:
+1. `site_metrics`: Singleton summary counters.
+2. `site_event_counts`: Aggregated event breakdown table.
+3. `site_events`: Full historical event log.
+4. `record_site_events(p_events)`: Atomic batch ingestion stored procedure.

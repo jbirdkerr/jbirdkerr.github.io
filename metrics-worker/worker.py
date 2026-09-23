@@ -22,12 +22,6 @@ ALLOWED_ORIGINS = {
     "https://jbirdkerr.net",
     "https://www.jbirdkerr.net",
     "https://jbirdkerr.github.io",
-    "http://localhost:8000",
-    "http://localhost:8080",
-    "http://localhost:3000",
-    "http://127.0.0.1:8000",
-    "http://127.0.0.1:5500",
-    "http://localhost:8787",
 }
 
 POSTHOG_API_HOST = "https://us.i.posthog.com"

@@ -53,7 +53,7 @@ body.party-mode {
     -webkit-user-drag: none;
 }
 .main-photo.boop-squish {
-    transform: scale(0.975);
+    transform: scale(0.99);
 }
 /* Nose Boop Hotspot */
 .snoot-hotspot {
@@ -77,16 +77,23 @@ body.party-mode {
     justify-content: center;
     align-items: center;
     pointer-events: none;
-    box-shadow: inset 0 5px 7px rgba(0, 0, 0, 0.85), inset 0 -2px 4px rgba(0, 0, 0, 0.5);
+    background: transparent;
+    box-shadow: none;
 }
 #socket-left {
-    left: 40.5%;
-    top: 21.6%;
-    width: 8.0%;
-    height: 4.0%;
-    border-radius: 50% 50% 45% 45% / 60% 60% 40% 40%;
+    left: 40.2%;
+    top: 21.8%;
+    width: 8.4%;
+    height: 4.3%;
+    border-radius: 48% 52% 46% 54% / 50% 50% 45% 55%;
     transform: rotate(2deg);
-    background: radial-gradient(ellipse at 50% 60%, #685350 0%, #503e3c 60%, #302221 100%);
+
+    background: radial-gradient(
+        ellipse at 50% 55%,
+        #685350 0%,
+        #503e3c 65%,
+        #302221 100%
+    );
 }
 #socket-right {
     left: 65.0%;

@@ -1,22 +1,20 @@
 name = "jbirdkerr-metrics"
 account_id = "1dcd86d2743bff3ea34323e58ee7470f"
 workers_dev = true
-compatibility_date = "2025-08-14"
-compatibility_flags = ["python_workers"]
+compatibility_date = "2026-09-22"  # bumped from 2025-08-14 — verify against latest Cloudflare release notes
+compatibility_flags = ["python_workers", "disable_python_external_sdk"]
 main = "./metrics-worker/worker.py"
 
 [vars]
 POSTHOG_PROJECT_ID = "566829"
 
-# Top-level Durable Object binding (used for default/dev deploys)
-[[durable_objects.bindings]]
-name = "METRICS_CACHE"
-class_name = "MetricsCache"
-
-# Top-level SQLite migration for Free Plan support
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["MetricsCache"]
+
+[[migrations]]
+tag = "v2"
+deleted_classes = ["MetricsCache"]
 
 # Production environment configuration
 [env.production]
@@ -27,17 +25,19 @@ routes = [
 
 [env.production.vars]
 POSTHOG_PROJECT_ID = "566829"
-
-# Durable Object bindings must be explicitly listed under environments
-[[env.production.durable_objects.bindings]]
-name = "METRICS_CACHE"
-class_name = "MetricsCache"
+SUPABASE_URL = "https://tmjvuvyjhweuzgxkqrhg.supabase.co"
 
 [observability.logs]
-enabled = false
+enabled = true
 head_sampling_rate = 1
 invocation_logs = true
 persist = true
 
 [observability.traces]
 enabled = false
+head_sampling_rate = 1
+persist = true
+
+# Remember: SUPABASE_SERVICE_ROLE_KEY is a secret, not a var — set it per environment:
+#   wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+#   wrangler secret put SUPABASE_SERVICE_ROLE_KEY --env production

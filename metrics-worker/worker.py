@@ -1,328 +1,361 @@
+"""
+Python equivalent of the PostHog proxy + Supabase metrics Cloudflare Worker.
+
+Requires (wrangler.jsonc):
+  "compatibility_flags": ["python_workers"]
+  "main": "src/entry.py"
+
+And in pyproject.toml:
+  dependencies = ["workers-runtime-sdk"]
+"""
+
 import json
-import time
 from datetime import datetime, timezone
-from typing import Any
 from urllib.parse import urlparse
 
-from pyodide.http import pyfetch
-from workers import DurableObject, Response, WorkerEntrypoint
+from pyodide.ffi import create_proxy
+from workers import Response, WorkerEntrypoint, fetch
 
 ALLOWED_ORIGINS = {
     "https://jbirdkerr.net",
     "https://www.jbirdkerr.net",
     "https://jbirdkerr.github.io",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-    "http://localhost:8787",
 }
 
-METRICS_TTL = 5
-CACHE_KEY = "metrics"
-REFRESH_ALARM_DELAY_MS = 100
-
-
-def get_origin(request) -> str | None:
-    headers = getattr(request, "headers", {})
-    if hasattr(headers, "get"):
-        return headers.get("origin") or headers.get("Origin")
-    return None
-
-
-def cors_headers(origin: str | None) -> dict[str, str]:
-    is_allowed = bool(origin and origin in ALLOWED_ORIGINS)
-    effective_origin = origin if is_allowed else "https://jbirdkerr.net"
-    return {
-        "Access-Control-Allow-Origin": effective_origin,
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": (
-            "Content-Type, Authorization, X-Requested-With, "
-            "HX-Request, HX-Current-URL, HX-Target, HX-Trigger, HX-Trigger-Name, X-PostHog-Token"
-        ),
-        "Access-Control-Allow-Credentials": "true",
-        "Vary": "Origin, HX-Request",
-    }
-
-
-async def fetch_metrics_from_posthog(key: str, project_id: str) -> dict[str, Any]:
-    url = f"https://us.posthog.com/api/projects/{project_id}/query/"
-    stats_query = {
-        "query": {
-            "kind": "HogQLQuery",
-            "query": """
-            SELECT
-              countIf(event = 'boop') as total_boops,
-              max(if(event = 'boop', toFloat(JSONExtractRaw(properties, 'combo_count')), 0)) as top_combo,
-              count() as total_events,
-              countIf(event = 'feature_toggle' and JSONExtractRaw(properties, 'feature') = '"eye_tracking"' and JSONExtractRaw(properties, 'enabled') = 'true') as eye_tracking,
-              countIf(event = 'feature_toggle' and JSONExtractRaw(properties, 'feature') = '"googly_eyes"' and JSONExtractRaw(properties, 'enabled') = 'true') as googly_eyes,
-              countIf(event = 'feature_toggle' and JSONExtractRaw(properties, 'feature') = '"party_mode"' and JSONExtractRaw(properties, 'enabled') = 'true') as party_mode,
-              countIf(event = 'treat_shower') as treats,
-              sum(if(event = 'eye_movement', toFloat(JSONExtractRaw(properties, 'distance_px')), 0)) as total_eye_dist
-            FROM events
-        """,
-        }
-    }
-    breakdown_query = {
-        "query": {
-            "kind": "HogQLQuery",
-            "query": "SELECT event, count() as cnt FROM events GROUP BY event ORDER BY cnt DESC LIMIT 10",
-        }
-    }
-    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
-
-    stats_res = await pyfetch(
-        url, method="POST", headers=headers, body=json.dumps(stats_query)
-    )
-    breakdown_res = await pyfetch(
-        url, method="POST", headers=headers, body=json.dumps(breakdown_query)
-    )
-
-    if stats_res.status != 200 or breakdown_res.status != 200:
-        raise RuntimeError(
-            f"PostHog API error: stats={stats_res.status}, breakdown={breakdown_res.status}"
-        )
-
-    stats_json = await stats_res.json()
-    breakdown_json = await breakdown_res.json()
-
-    row = stats_json.get("results", [[]])[0] if stats_json.get("results") else [0] * 8
-    breakdown_map = {
-        event: count for event, count in breakdown_json.get("results", [])
-    }
-
-    return {
-        "totalBoops": int(row[0]) if row[0] else 0,
-        "topCombo": round(float(row[1])) if row[1] else 0,
-        "totalEvents": int(row[2]) if row[2] else 0,
-        "eyeDistancePx": round(float(row[7])) if row[7] else 0,
-        "featureToggles": {
-            "eyeTracking": int(row[3]) if row[3] else 0,
-            "googlyEyes": int(row[4]) if row[4] else 0,
-            "partyMode": int(row[5]) if row[5] else 0,
-            "treats": int(row[6]) if row[6] else 0,
-        },
-        "eventBreakdown": breakdown_map,
-        "lastUpdated": datetime.now(timezone.utc).isoformat(),
-    }
-
-
-class MetricsCache(DurableObject):
-    """Single global, durable 10-second application cache for PostHog metrics."""
-
-    def __init__(self, ctx, env):
-        super().__init__(ctx, env)
-        self.storage = ctx.storage
-        self.env = env
-        self.cached_metrics = None
-        self.last_refresh = 0.0
-
-        async def initialize():
-            record = await self.storage.get(CACHE_KEY)
-            if record:
-                self.cached_metrics = record.get("metrics")
-                self.last_refresh = float(record.get("lastRefresh", 0))
-
-        self.ctx.blockConcurrencyWhile(initialize)
-
-    def fresh(self) -> bool:
-        return (
-            self.cached_metrics is not None
-            and time.time() - self.last_refresh < METRICS_TTL
-        )
-
-    async def refresh(self):
-        key = getattr(self.env, "POSTHOG_API_KEY", None)
-        project_id = getattr(self.env, "POSTHOG_PROJECT_ID", None)
-        if not key or not project_id:
-            raise RuntimeError("Missing PostHog configuration")
-
-        metrics = await fetch_metrics_from_posthog(key, project_id)
-        self.cached_metrics = metrics
-        self.last_refresh = time.time()
-        await self.storage.put(
-            CACHE_KEY,
-            {
-                "metrics": metrics,
-                "lastRefresh": self.last_refresh,
-            },
-        )
-        return metrics
-
-    async def get_metrics(self):
-        if not self.fresh():
-            return await self.refresh()
-        return self.cached_metrics
-
-    async def alarm(self, alarm_info=None):
-        """Refresh outside the HTTP request path; retain last-good data on failure."""
-        try:
-            if self.cached_metrics is None or not self.fresh():
-                await self.refresh()
-        except Exception as exc:
-            print(f"Metrics refresh alarm failed: {exc}")
-            await self.storage.setAlarm(int(time.time() * 1000) + METRICS_TTL * 1000)
+POSTHOG_API_HOST = "https://us.i.posthog.com"
+POSTHOG_ASSETS_HOST = "https://us-assets.i.posthog.com"
 
 
 class Default(WorkerEntrypoint):
     async def fetch(self, request):
         url = urlparse(request.url)
-        origin = get_origin(request)
-        headers = cors_headers(origin)
-
-        if origin and origin not in ALLOWED_ORIGINS and request.method != "OPTIONS":
-            return Response(
-                json.dumps({"error": "Unauthorized origin"}),
-                status=403,
-                headers={**headers, "Content-Type": "application/json"},
-            )
+        origin = request.headers.get("Origin")
+        cors_headers = get_cors_headers(origin)
 
         if request.method == "OPTIONS":
-            return Response(None, headers=headers)
+            # Preflight: echo back whatever headers the browser says it's about
+            # to send, rather than a hardcoded list. A hardcoded
+            # Access-Control-Allow-Headers that doesn't cover every header the
+            # actual request sends (e.g. PostHog SDK headers) causes the
+            # browser to fail the preflight with "CORS Missing Allowed Header".
+            requested_headers = request.headers.get("Access-Control-Request-Headers")
+            preflight_headers = dict(cors_headers)
+            if requested_headers:
+                preflight_headers["Access-Control-Allow-Headers"] = requested_headers
+            return Response(None, status=204, headers=preflight_headers)
+
+        if url.path == "/health":
+            return Response.json(
+                {
+                    "status": "ok",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+                headers=cors_headers,
+            )
 
         if url.path == "/metrics" and request.method == "GET":
-            try:
-                stub = self.env.METRICS_CACHE.getByName("global")
-                metrics = await stub.get_metrics()
-                return Response(
-                    render_metrics_html(metrics),
-                    status=200,
-                    headers={
-                        **headers,
-                        "Content-Type": "text/html; charset=UTF-8",
-                        "Cache-Control": "no-cache, no-store, must-revalidate",
-                    },
-                )
-            except Exception as exc:
-                print(f"Metrics Worker error: {exc}")
-                return Response(
-                    f'<div class="error">⚠️ Unable to load metrics<br><small>{exc}</small></div>',
-                    status=500,
-                    headers={**headers, "Content-Type": "text/html; charset=UTF-8"},
-                )
+            return await handle_metrics(self.env, cors_headers)
 
-        if url.path == "/health" and request.method == "GET":
-            return Response(
-                json.dumps({"status": "ok"}),
-                headers={**headers, "Content-Type": "application/json"},
-            )
+        # PostHog's browser SDK sends capture traffic through api_host.
+        # We forward it to PostHog and independently persist the same events
+        # to Supabase so the metrics path does not depend on PostHog query latency.
+        if is_posthog_path(url.path):
+            return await proxy_posthog(request, url, self.env, cors_headers, self.ctx)
 
-        posthog_paths = [
-            "/static/",
-            "/array/",
-            "/e/",
-            "/s/",
-            "/flags/",
-            "/decide",
-            "/capture",
-            "/engage",
-            "/i/",
-        ]
-        if any(url.path.startswith(path) for path in posthog_paths):
-            return await self.posthog_proxy(request, url, headers)
+        return Response("Not Found", status=404, headers=cors_headers)
 
-        return Response(
-            json.dumps({"error": "Not found"}),
-            status=404,
-            headers={**headers, "Content-Type": "application/json"},
+
+def get_cors_headers(origin):
+    headers = {
+        "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Requested-With",
+        "Vary": "Origin",
+    }
+
+    if origin and origin in ALLOWED_ORIGINS:
+        headers["Access-Control-Allow-Origin"] = origin
+
+    return headers
+
+
+def is_posthog_path(pathname):
+    return (
+        pathname.startswith("/static/")
+        or pathname.startswith("/array/")
+        or pathname.startswith("/e/")
+        or pathname.startswith("/s/")
+        or pathname.startswith("/flags/")
+        or pathname == "/decide"
+        or pathname == "/capture"
+        or pathname == "/capture/"
+        or pathname == "/batch"
+        or pathname == "/batch/"
+        or pathname == "/engage"
+        or pathname.startswith("/i/")
+    )
+
+
+async def proxy_posthog(request, url, env, cors_headers, ctx):
+    is_asset = url.path.startswith("/static/") or url.path.startswith("/array/")
+
+    target_host = POSTHOG_ASSETS_HOST if is_asset else POSTHOG_API_HOST
+    query = f"?{url.query}" if url.query else ""
+    target_url = f"{target_host}{url.path}{query}"
+
+    # request.headers is a JS Headers object exposed via FFI; it is iterable
+    # as (name, value) pairs, and dict() will consume that directly.
+    headers = dict(request.headers)
+    headers.pop("host", None)
+    headers.pop("origin", None)
+    # request.arrayBuffer() transparently decompresses a gzip-encoded body
+    # (common for PostHog's /s/ session-recording and /i/v0/e/ capture
+    # traffic), so by the time we forward it the bytes are plain, not gzip.
+    # Forwarding the original Content-Encoding header would tell PostHog to
+    # gunzip already-plain data, producing an empty/garbage result and a
+    # JSON parse failure on their end. Content-Length is dropped too since
+    # the runtime recalculates it from the actual outgoing body anyway.
+    headers.pop("content-encoding", None)
+    headers.pop("content-length", None)
+
+    body = None
+    if request.method not in ("GET", "HEAD"):
+        # .bytes() (not .arrayBuffer() — that's the raw JS method name and
+        # doesn't exist on this Pythonic Request wrapper) reads the body as
+        # raw bytes, binary-safe for compressed/non-UTF-8 payloads, and
+        # returns native Python bytes directly.
+        body = await request.bytes()
+
+    # Make a best-effort copy of the event into Supabase. PostHog still gets
+    # the original request even if the Supabase write fails.
+    #
+    # Path note: current posthog-js sends event captures to /i/v0/e/ by
+    # default; /capture and /batch are older/alternate endpoints kept here
+    # for compatibility. /s/ (session recordings) is deliberately excluded —
+    # those aren't discrete "events" in the same shape. Confirm in your
+    # Network tab which path your actual event captures use (a 200, not the
+    # session-recording /s/ traffic) and add it here if it differs.
+    persistable_paths = {"/capture", "/capture/", "/batch", "/batch/", "/i/v0/e/", "/i/v0/e", "/e/", "/e"}
+    if (
+        request.method == "POST"
+        and not is_asset
+        and url.path in persistable_paths
+    ):
+        try:
+            payload_bytes = body if body is not None else b""
+            ctx.waitUntil(create_proxy(persist_posthog_payload(payload_bytes, env)))
+        except Exception as error:
+            print(f"Unable to queue Supabase persistence: {error}")
+
+    response = await fetch(
+        target_url,
+        method=request.method,
+        headers=headers,
+        body=body,
+        redirect="follow",
+    )
+
+    response_headers = dict(response.headers)
+    response_headers.update(cors_headers)
+
+    if is_asset:
+        response_headers["Cache-Control"] = "public, max-age=86400"
+
+    return Response(response.body, status=response.status, headers=response_headers)
+
+
+async def persist_posthog_payload(payload_bytes, env):
+    if not getattr(env, "SUPABASE_URL", None) or not getattr(
+        env, "SUPABASE_SERVICE_ROLE_KEY", None
+    ):
+        print("Supabase environment variables are not configured")
+        return
+
+    try:
+        # json.loads accepts bytes directly; this also naturally fails (and
+        # is caught below) for compressed bodies we can't parse as JSON,
+        # e.g. a gzip-encoded /i/v0/e/ payload we choose not to persist.
+        payload = json.loads(payload_bytes)
+    except (TypeError, ValueError):
+        print("PostHog payload was not valid JSON")
+        return
+
+    events = normalize_posthog_payload(payload)
+    if not events:
+        return
+
+    response = await fetch(
+        f"{env.SUPABASE_URL}/rest/v1/rpc/record_site_events",
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "apikey": env.SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": f"Bearer {env.SUPABASE_SERVICE_ROLE_KEY}",
+        },
+        body=json.dumps({"p_events": events}),
+    )
+
+    if not response.ok:
+        error_text = await response.text()
+        print(f"Supabase event persistence failed: {response.status} {error_text}")
+
+
+def normalize_posthog_payload(payload):
+    if isinstance(payload, dict) and isinstance(payload.get("batch"), list):
+        raw_events = payload["batch"]
+    elif isinstance(payload, dict) and payload.get("event"):
+        raw_events = [payload]
+    else:
+        raw_events = []
+
+    events = []
+    for item in raw_events:
+        event = item.get("event")
+        if not isinstance(event, str):
+            continue
+        properties = item.get("properties")
+        events.append(
+            {
+                "event": event,
+                "properties": properties if isinstance(properties, dict) else {},
+                "occurred_at": item.get("timestamp"),
+                "distinct_id": item.get("distinct_id")
+                if isinstance(item.get("distinct_id"), str)
+                else None,
+            }
+        )
+    return events
+
+
+async def handle_metrics(env, cors_headers):
+    if not getattr(env, "SUPABASE_URL", None) or not getattr(
+        env, "SUPABASE_SERVICE_ROLE_KEY", None
+    ):
+        return Response.json(
+            {"error": "Supabase configuration missing"},
+            status=500,
+            headers=cors_headers,
         )
 
-    async def posthog_proxy(self, request, url, cors):
-        is_asset = url.path.startswith("/static/") or url.path.startswith("/array/")
-        host = "us-assets.i.posthog.com" if is_asset else "us.i.posthog.com"
-        target = f"https://{host}{url.path}" + (f"?{url.query}" if url.query else "")
-
-        req_headers = {}
-        headers_obj = getattr(request, "headers", {})
-        if hasattr(headers_obj, "entries"):
-            for k, v in headers_obj.entries():
-                req_headers[k.lower()] = str(v)
-        elif hasattr(headers_obj, "items"):
-            for k, v in headers_obj.items():
-                req_headers[k.lower()] = str(v)
-
-        req_headers["host"] = host
-
-        cf_ip = headers_obj.get("cf-connecting-ip") if hasattr(headers_obj, "get") else None
-        if cf_ip:
-            req_headers["x-forwarded-for"] = str(cf_ip)
-
-        for drop_header in ["content-length", "cf-ray", "cf-connecting-ip", "cf-visitor", "connection"]:
-            req_headers.pop(drop_header, None)
-
-        body = None
-        if request.method not in ("GET", "HEAD"):
-            if hasattr(request, "bytes"):
-                body = await request.bytes()
-            elif hasattr(request, "arrayBuffer"):
-                body = await request.arrayBuffer()
-            else:
-                body = await request.text()
-
-        try:
-            res = await pyfetch(
-                target, method=request.method, headers=req_headers, body=body
-            )
-
-            res_headers = {}
-            if hasattr(res.headers, "entries"):
-                for k, v in res.headers.entries():
-                    res_headers[k.lower()] = str(v)
-            elif hasattr(res.headers, "items"):
-                for k, v in res.headers.items():
-                    res_headers[k.lower()] = str(v)
-
-            for drop in [
-                "content-encoding",
-                "content-length",
-                "transfer-encoding",
-                "access-control-allow-origin",
-                "access-control-allow-credentials",
-                "access-control-allow-methods",
-                "access-control-allow-headers",
-                "access-control-expose-headers",
-                "access-control-max-age",
-            ]:
-                res_headers.pop(drop, None)
-
-            res_headers.update(cors)
-
-            if is_asset:
-                res_headers["Cache-Control"] = "public, max-age=86400"
-
-            content = await res.bytes()
-            return Response(content, status=res.status, headers=res_headers)
-        except Exception as exc:
-            print(f"PostHog proxy error: {exc}")
-            return Response(
-                json.dumps({"error": "Proxy failed"}),
-                status=502,
-                headers={**cors, "Content-Type": "application/json"},
-            )
-
-
-def render_metrics_html(metrics: dict[str, Any]) -> str:
-    distance = metrics.get("eyeDistancePx", 0)
-    toggles = metrics.get("featureToggles", {})
-    html = f"""
-    <div class="metric-row"><span class="metric-label">Total Boops</span><span class="metric-value">{metrics.get('totalBoops', 0)}</span></div>
-    <div class="metric-row"><span class="metric-label">Total Events Tracked</span><span class="metric-value">{metrics.get('totalEvents', 0)}</span></div>
-    <div class="metric-row"><span class="metric-label">Max Boop Combo</span><span class="metric-value">×{metrics.get('topCombo', 0)}</span></div>
-    <div class="metric-row"><span class="metric-label">👀 Eyeball Distance Rolled</span><span class="metric-value">{distance / 3780:.2f} m <small>({distance:,} px)</small></span></div>
-    <h3>🎮 Feature Toggles</h3><div class="feature-grid">
-      <div class="feature-box"><div class="feature-name">Eye Tracking</div><div class="feature-count">{toggles.get('eyeTracking', 0)}</div></div>
-      <div class="feature-box"><div class="feature-name">Googly Eyes</div><div class="feature-count">{toggles.get('googlyEyes', 0)}</div></div>
-      <div class="feature-box"><div class="feature-name">Party Mode</div><div class="feature-count">{toggles.get('partyMode', 0)}</div></div>
-      <div class="feature-box"><div class="feature-name">Treats</div><div class="feature-count">{toggles.get('treats', 0)}</div></div>
-    </div><h3>📈 Event Breakdown</h3>
-    """
-    for event, count in metrics.get("eventBreakdown", {}).items():
-        html += f'<div class="metric-row"><span class="metric-label">{event}</span><span class="metric-value">{count}</span></div>'
-    updated = metrics.get("lastUpdated", "")
     try:
-        updated = datetime.fromisoformat(updated).strftime("%H:%M:%S")
-    except ValueError:
-        updated = "—"
+        summary_response = await supabase_request(env, "/rest/v1/site_metrics?select=*")
+        events_response = await supabase_request(
+            env,
+            "/rest/v1/site_event_counts?select=event,count&order=count.desc&limit=10",
+        )
+
+        if not summary_response.ok or not events_response.ok:
+            raise Exception(
+                f"Supabase metrics query failed: "
+                f"{summary_response.status}/{events_response.status}"
+            )
+
+        summary_rows = await summary_response.json()
+        event_rows = await events_response.json()
+        summary = summary_rows[0] if summary_rows else {}
+
+        updated_at = summary.get("updated_at") or datetime.now(timezone.utc).isoformat()
+
+        return Response(
+            render_metrics_html(summary, event_rows),
+            headers={
+                **cors_headers,
+                "Content-Type": "text/html; charset=utf-8",
+                "Cache-Control": "no-store",
+                "X-Metrics-Generated": updated_at,
+            },
+        )
+    except Exception as error:
+        print(f"Metrics query failed: {error}")
+        return Response(
+            '<div class="error">⚠️ Unable to load metrics</div>',
+            status=503,
+            headers={
+                **cors_headers,
+                "Content-Type": "text/html; charset=utf-8",
+                "Cache-Control": "no-store",
+            },
+        )
+
+
+async def supabase_request(env, path, method="GET"):
+    return await fetch(
+        f"{env.SUPABASE_URL}{path}",
+        method=method,
+        headers={
+            "apikey": env.SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": f"Bearer {env.SUPABASE_SERVICE_ROLE_KEY}",
+        },
+    )
+
+
+def render_metrics_html(summary, event_rows):
+    total_boops = number(summary.get("total_boops"))
+    max_boop_combo = number(summary.get("max_boop_combo"))
+    total_events = number(summary.get("total_events"))
+    eye_tracking_toggles = number(summary.get("eye_tracking_toggles"))
+    googly_eye_toggles = number(summary.get("googly_eyes_toggles"))
+    party_mode_toggles = number(summary.get("party_mode_toggles"))
+    treat_showers = number(summary.get("treat_showers"))
+    total_eye_distance = number(summary.get("total_eye_distance"))
+
+    event_html = "".join(
+        f"<tr><td>{escape_html(row.get('event'))}</td>"
+        f"<td>{fmt(number(row.get('count')))}</td></tr>"
+        for row in event_rows
+    )
+
+    updated_at = summary.get("updated_at")
+    if updated_at:
+        try:
+            updated = datetime.fromisoformat(updated_at.replace("Z", "+00:00")).strftime(
+                "%I:%M:%S %p"
+            )
+        except ValueError:
+            updated = updated_at
+    else:
+        updated = "unknown"
+
+    return f"""
+    <div class="metrics">
+      <div class="metrics-grid">
+        <div class="metric"><strong>{fmt(total_boops)}</strong><span>Boops</span></div>
+        <div class="metric"><strong>{fmt(max_boop_combo)}</strong><span>Max Boop Combo</span></div>
+        <div class="metric"><strong>{fmt(total_events)}</strong><span>Total Events</span></div>
+        <div class="metric"><strong>{fmt(eye_tracking_toggles)}</strong><span>Eye Tracking</span></div>
+        <div class="metric"><strong>{fmt(googly_eye_toggles)}</strong><span>Googly Eyes</span></div>
+        <div class="metric"><strong>{fmt(party_mode_toggles)}</strong><span>Party Mode</span></div>
+        <div class="metric"><strong>{fmt(treat_showers)}</strong><span>Treat Showers</span></div>
+        <div class="metric"><strong>{fmt(total_eye_distance)}</strong><span>Eye Distance</span></div>
+      </div>
+
+      <h3>Top Events</h3>
+      <table class="metrics-events">
+        <thead><tr><th>Event</th><th>Count</th></tr></thead>
+        <tbody>{event_html}</tbody>
+      </table>
+
+      <div class="metrics-updated">🟢 Updated {escape_html(updated)}</div>
+    </div>
+    """
+
+
+def number(value):
+    try:
+        return float(value) if value is not None else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def fmt(value):
+    return f"{value:,.0f}" if value == int(value) else f"{value:,}"
+
+
+def escape_html(value):
     return (
-        html
-        + f'<div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(0,212,255,.2);font-size:.8rem;color:#666;">Last updated: {updated}</div>'
+        str(value)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#039;")
     )

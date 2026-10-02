@@ -444,9 +444,6 @@ body.party-mode {
 #credits-toggle {
     top: 64px;
 }
-#github-link {
-    top: 104px;
-}
 .metrics-toggle:hover {
     background: rgba(0, 212, 255, 0.25);
     border-color: #00d4ff;

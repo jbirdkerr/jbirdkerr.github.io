@@ -21,7 +21,7 @@ sequenceDiagram
     Note over Browser: Plays WebAudio SFX & Spawns Particles (0ms)
     Browser->>Browser: PostHog SDK buffers & batches payload
     Browser->>Worker: POST /i/v0/e/ (JSON or gzip/base64 payload)
-    
+
     par Forward to PostHog
         Worker->>PostHog: POST https://us.i.posthog.com/i/v0/e/
         PostHog-->>Worker: 200 OK
@@ -31,7 +31,7 @@ sequenceDiagram
         Note over Supabase: Atomic transaction updates:<br/>1. public.site_events (insert log)<br/>2. public.site_event_counts (upsert count)<br/>3. public.site_metrics (increment totals & combos)
         Supabase-->>Worker: 200 OK (Updated metrics JSON)
     end
-    
+
     Worker-->>Browser: 200 OK
 ```
 
@@ -66,7 +66,7 @@ sequenceDiagram
     User->>Modal: Clicks "📊 Metrics" or presses [M]
     Note over Modal: Immediately flushes pending eye distance
     Modal->>Cache: GET https://metrics-api.jbirdkerr.net/metrics
-    
+
     alt Cache Hit (within 3 seconds)
         Cache-->>Modal: Return cached HTML response
     else Cache Miss

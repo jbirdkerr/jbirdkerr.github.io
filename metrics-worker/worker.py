@@ -12,11 +12,33 @@ And in pyproject.toml:
 import base64
 import gzip
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import parse_qs, unquote, urlparse
 
-from pyodide.ffi import create_proxy
-from workers import Response, WorkerEntrypoint, fetch
+try:
+    from pyodide.ffi import create_proxy
+    from workers import Response, WorkerEntrypoint, fetch
+except ImportError:  # pragma: no cover
+    # Stubs for local execution, linting, and testing outside Cloudflare Pyodide
+    def create_proxy(obj):
+        return obj
+
+    class WorkerEntrypoint:
+        pass
+
+    class Response:
+        def __init__(self, body=None, status=200, headers=None):
+            self.body = body
+            self.status = status
+            self.headers = headers or {}
+
+        @classmethod
+        def json(cls, data, status=200, headers=None):
+            return cls(json.dumps(data), status=status, headers=headers)
+
+    async def fetch(*args, **kwargs):
+        pass
+
 
 ALLOWED_ORIGINS = {
     "https://jbirdkerr.net",
@@ -50,7 +72,7 @@ class Default(WorkerEntrypoint):
             return Response.json(
                 {
                     "status": "ok",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 },
                 headers=cors_headers,
             )
@@ -151,9 +173,7 @@ async def proxy_posthog(request, url, env, cors_headers, ctx):
     if request.method == "POST" and not is_asset and persistable:
         try:
             payload_bytes = body if body is not None else b""
-            ctx.waitUntil(
-                create_proxy(persist_posthog_payload(payload_bytes, env, url.query))
-            )
+            ctx.waitUntil(create_proxy(persist_posthog_payload(payload_bytes, env, url.query)))
         except Exception as error:
             print(f"Unable to queue Supabase persistence: {error}")
 
@@ -327,9 +347,7 @@ def normalize_posthog_payload(payload):
                 "properties": properties if isinstance(properties, dict) else {},
                 "occurred_at": item.get("timestamp"),
                 "distinct_id": (
-                    item.get("distinct_id")
-                    if isinstance(item.get("distinct_id"), str)
-                    else None
+                    item.get("distinct_id") if isinstance(item.get("distinct_id"), str) else None
                 ),
             }
         )
@@ -355,15 +373,14 @@ async def handle_metrics(env, cors_headers):
 
         if not summary_response.ok or not events_response.ok:
             raise Exception(
-                f"Supabase metrics query failed: "
-                f"{summary_response.status}/{events_response.status}"
+                f"Supabase metrics query failed: {summary_response.status}/{events_response.status}"
             )
 
         summary_rows = await summary_response.json()
         event_rows = await events_response.json()
         summary = summary_rows[0] if summary_rows else {}
 
-        updated_at = summary.get("updated_at") or datetime.now(timezone.utc).isoformat()
+        updated_at = summary.get("updated_at") or datetime.now(UTC).isoformat()
 
         return Response(
             render_metrics_html(summary, event_rows),
@@ -412,13 +429,11 @@ def render_metrics_html(summary, event_rows):
 
     distance_m = total_eye_distance / 3780
 
-    raw_updated_at = summary.get("updated_at") or datetime.now(timezone.utc).isoformat()
+    raw_updated_at = summary.get("updated_at") or datetime.now(UTC).isoformat()
     updated_at = summary.get("updated_at")
     if updated_at:
         try:
-            updated = datetime.fromisoformat(
-                updated_at.replace("Z", "+00:00")
-            ).strftime("%H:%M:%S")
+            updated = datetime.fromisoformat(updated_at.replace("Z", "+00:00")).strftime("%H:%M:%S")
         except ValueError:
             updated = updated_at
     else:
@@ -437,7 +452,9 @@ def render_metrics_html(summary, event_rows):
     </div><h3>📈 Event Breakdown</h3>
     """
     custom_events = [
-        r for r in event_rows if (r.get("event") or "").strip() and not (r.get("event") or "").strip().startswith("$")
+        r
+        for r in event_rows
+        if (r.get("event") or "").strip() and not (r.get("event") or "").strip().startswith("$")
     ][:10]
     for row in custom_events:
         event = escape_html(row.get("event") or "")

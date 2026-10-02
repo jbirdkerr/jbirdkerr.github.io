@@ -436,12 +436,16 @@ body.party-mode {
     display: flex;
     align-items: center;
     gap: 6px;
+    text-decoration: none;
 }
 #metrics-toggle {
     top: 24px;
 }
 #credits-toggle {
     top: 64px;
+}
+#github-link {
+    top: 104px;
 }
 .metrics-toggle:hover {
     background: rgba(0, 212, 255, 0.25);

@@ -83,6 +83,13 @@ function captureEvent(eventName, properties = {}) {
         }
     });
 
+    const githubLink = document.getElementById('github-link');
+    if (githubLink) {
+        githubLink.addEventListener('click', () => {
+            captureEvent('github_click', { url: githubLink.href });
+        });
+    }
+
     // Format metrics timestamps into local browser timezone
     function localizeMetricsTimestamp(containerEl) {
         const container = containerEl || document.getElementById('metrics-container');

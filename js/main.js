@@ -5,7 +5,14 @@ posthog.init('phc_zugUWyUvq2VWid5q6XxqRtHnBXsoLDB9BhaaY6VxVuXJ', {
     ui_host: 'https://us.posthog.com',
     person_profiles: 'always',
     cross_subdomain_cookie: false,
-    request_batching: true
+    request_batching: true,
+    capture_performance: {
+        web_vitals: true,
+        network_timing: true
+    },
+    autocapture: {
+        capture_copied_text: false
+    }
 });
 
 function captureEvent(eventName, properties = {}) {
@@ -23,30 +30,64 @@ function captureEvent(eventName, properties = {}) {
     const metricsModal = document.getElementById('metrics-modal');
     const creditsModal = document.getElementById('credits-modal');
     let metricsPollInterval = null;
+    let healthPollInterval = null;
+
+    function startEngagementPolling() {
+        stopEngagementPolling();
+        window.htmx.ajax('GET', 'https://metrics-api.jbirdkerr.net/metrics', '#metrics-container');
+        metricsPollInterval = setInterval(() => {
+            if (document.hidden || !metricsModal.classList.contains('active')) {
+                return;
+            }
+            const activeTab = document.querySelector('.tab-btn.active');
+            if (activeTab && activeTab.dataset.tab !== 'engagement') return;
+            window.htmx.ajax('GET', 'https://metrics-api.jbirdkerr.net/metrics', '#metrics-container');
+        }, 5000);
+    }
+
+    function stopEngagementPolling() {
+        if (metricsPollInterval) {
+            clearInterval(metricsPollInterval);
+            metricsPollInterval = null;
+        }
+    }
+
+    function startHealthPolling() {
+        stopHealthPolling();
+        window.htmx.ajax('GET', 'https://metrics-api.jbirdkerr.net/health-metrics', '#health-container');
+        healthPollInterval = setInterval(() => {
+            if (document.hidden || !metricsModal.classList.contains('active')) return;
+            const activeTab = document.querySelector('.tab-btn.active');
+            if (activeTab && activeTab.dataset.tab !== 'health') return;
+            window.htmx.ajax('GET', 'https://metrics-api.jbirdkerr.net/health-metrics', '#health-container');
+        }, 5000);
+    }
+
+    function stopHealthPolling() {
+        if (healthPollInterval) {
+            clearInterval(healthPollInterval);
+            healthPollInterval = null;
+        }
+    }
 
     function openMetricsModal() {
         if (typeof flushEyeDistance === 'function') {
             flushEyeDistance();
         }
         metricsModal.classList.add('active');
-        if (metricsPollInterval) {
-            clearInterval(metricsPollInterval);
+        const activeTab = document.querySelector('.tab-btn.active');
+        const tabName = activeTab ? activeTab.dataset.tab : 'engagement';
+        if (tabName === 'health') {
+            startHealthPolling();
+        } else {
+            startEngagementPolling();
         }
-        window.htmx.ajax('GET', 'https://metrics-api.jbirdkerr.net/metrics', '#metrics-container');
-        metricsPollInterval = setInterval(() => {
-            if (document.hidden || !metricsModal.classList.contains('active')) {
-                return;
-            }
-            window.htmx.ajax('GET', 'https://metrics-api.jbirdkerr.net/metrics', '#metrics-container');
-        }, 5000);
     }
 
     function closeMetricsModal() {
         metricsModal.classList.remove('active');
-        if (metricsPollInterval) {
-            clearInterval(metricsPollInterval);
-            metricsPollInterval = null;
-        }
+        stopEngagementPolling();
+        stopHealthPolling();
     }
 
     function openCreditsModal() {
@@ -83,6 +124,27 @@ function captureEvent(eventName, properties = {}) {
         }
     });
 
+    // Tab switching
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            tabBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            const targetPanel = document.getElementById('tab-' + btn.dataset.tab);
+            if (targetPanel) targetPanel.classList.add('active');
+
+            if (btn.dataset.tab === 'health') {
+                stopEngagementPolling();
+                startHealthPolling();
+            } else {
+                stopHealthPolling();
+                startEngagementPolling();
+            }
+        });
+    });
+
     const githubLink = document.getElementById('github-link');
     if (githubLink) {
         githubLink.addEventListener('click', () => {
@@ -92,7 +154,7 @@ function captureEvent(eventName, properties = {}) {
 
     // Format metrics timestamps into local browser timezone
     function localizeMetricsTimestamp(containerEl) {
-        const container = containerEl || document.getElementById('metrics-container');
+        const container = containerEl || document.getElementById('modal-content');
         if (!container) return;
         const timeEls = container.querySelectorAll('.metrics-timestamp');
         timeEls.forEach((timeEl) => {
@@ -117,24 +179,39 @@ function captureEvent(eventName, properties = {}) {
     }
 
     document.addEventListener('htmx:afterSwap', (e) => {
-        if (e.target && (e.target.id === 'metrics-container' || e.target.querySelector('#metrics-container'))) {
+        if (e.target && (
+            e.target.id === 'metrics-container' ||
+            e.target.id === 'health-container' ||
+            e.target.querySelector('#metrics-container') ||
+            e.target.querySelector('#health-container')
+        )) {
             localizeMetricsTimestamp(e.target);
         }
     });
 
     document.addEventListener('htmx:afterSettle', (e) => {
-        if (e.target && (e.target.id === 'metrics-container' || e.target.querySelector('#metrics-container'))) {
+        if (e.target && (
+            e.target.id === 'metrics-container' ||
+            e.target.id === 'health-container' ||
+            e.target.querySelector('#metrics-container') ||
+            e.target.querySelector('#health-container')
+        )) {
             localizeMetricsTimestamp(e.target);
         }
     });
 
     // Pause polling when tab is hidden
     document.addEventListener('visibilitychange', () => {
-        if (document.hidden && metricsPollInterval) {
-            clearInterval(metricsPollInterval);
-            metricsPollInterval = null;
-        } else if (!document.hidden && metricsModal.classList.contains('active')) {
-            openMetricsModal();
+        if (document.hidden) {
+            stopEngagementPolling();
+            stopHealthPolling();
+        } else if (metricsModal.classList.contains('active')) {
+            const activeTab = document.querySelector('.tab-btn.active');
+            if (activeTab && activeTab.dataset.tab === 'health') {
+                startHealthPolling();
+            } else {
+                startEngagementPolling();
+            }
         }
     });
     /* ============================================================

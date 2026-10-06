@@ -11,6 +11,7 @@ from worker import (
     is_posthog_path,
     normalize_posthog_payload,
     number,
+    render_health_metrics_html,
     render_metrics_html,
 )
 
@@ -144,6 +145,34 @@ class TestMetricsWorker(unittest.TestCase):
         self.assertIn("snoot_boop", html)
         self.assertIn("treat_showered", html)
         self.assertNotIn("$pageview", html)  # Should filter internal $ events
+
+    def test_render_health_metrics_html(self):
+        stats = {
+            "total_requests": 150,
+            "total_proxy_requests": 100,
+            "total_metrics_requests": 40,
+            "total_health_requests": 10,
+            "total_errors_4xx": 2,
+            "total_errors_5xx": 1,
+            "total_supabase_write_failures": 0,
+            "total_posthog_proxy_failures": 0,
+            "total_decode_failures": 0,
+            "total_decode_successes": 100,
+            "sum_metrics_latency_ms": 1200,
+            "count_metrics_latency": 40,
+            "sum_proxy_latency_ms": 5000,
+            "count_proxy_latency": 100,
+            "sum_persist_latency_ms": 3000,
+            "count_persist_latency": 100,
+            "updated_at": "2026-10-05T22:00:00Z",
+        }
+        html = render_health_metrics_html(stats)
+        self.assertIn("Request Volume", html)
+        self.assertIn("150", html)
+        self.assertIn("30 ms", html)  # 1200 / 40 avg metrics
+        self.assertIn("50 ms", html)  # 5000 / 100 avg proxy
+        self.assertIn("100.0%", html)  # decode success rate
+        self.assertIn("Pipeline Health", html)
 
 
 if __name__ == "__main__":

@@ -462,3 +462,37 @@ body.party-mode {
     text-align: center;
     padding: 20px;
 }
+/* Tab Bar */
+.tab-bar {
+    display: flex;
+    gap: 0;
+    margin-bottom: 16px;
+    border-bottom: 2px solid rgba(0, 212, 255, 0.3);
+}
+.tab-btn {
+    flex: 1;
+    background: none;
+    border: none;
+    color: #888;
+    font-family: monospace;
+    font-size: 0.85rem;
+    padding: 10px 8px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+}
+.tab-btn.active {
+    color: #00d4ff;
+    border-bottom-color: #00d4ff;
+}
+.tab-btn:hover {
+    color: #fff;
+}
+.tab-panel {
+    display: none;
+}
+.tab-panel.active {
+    display: block;
+}
+

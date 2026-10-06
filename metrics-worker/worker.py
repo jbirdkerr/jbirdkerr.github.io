@@ -12,6 +12,7 @@ And in pyproject.toml:
 import base64
 import gzip
 import json
+import time
 from datetime import UTC, datetime
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -52,6 +53,7 @@ POSTHOG_ASSETS_HOST = "https://us-assets.i.posthog.com"
 
 class Default(WorkerEntrypoint):
     async def fetch(self, request):
+        start_time = time.monotonic()
         url = urlparse(request.url)
         origin = request.headers.get("Origin")
         cors_headers = get_cors_headers(origin)
@@ -69,23 +71,64 @@ class Default(WorkerEntrypoint):
             return Response(None, status=204, headers=preflight_headers)
 
         if url.path == "/health":
-            return Response.json(
+            response = Response.json(
                 {
                     "status": "ok",
                     "timestamp": datetime.now(UTC).isoformat(),
                 },
                 headers=cors_headers,
             )
+            elapsed_ms = (time.monotonic() - start_time) * 1000
+            self.ctx.waitUntil(
+                create_proxy(record_worker_health(self.env, "health", 200, latency_ms=elapsed_ms))
+            )
+            return response
 
         if url.path == "/metrics" and request.method == "GET":
-            return await handle_metrics(self.env, cors_headers)
+            response = await handle_metrics(self.env, cors_headers)
+            elapsed_ms = (time.monotonic() - start_time) * 1000
+            self.ctx.waitUntil(
+                create_proxy(
+                    record_worker_health(
+                        self.env, "metrics", response.status, latency_ms=elapsed_ms
+                    )
+                )
+            )
+            return response
+
+        if url.path == "/health-metrics" and request.method == "GET":
+            response = await handle_health_metrics(self.env, cors_headers)
+            elapsed_ms = (time.monotonic() - start_time) * 1000
+            self.ctx.waitUntil(
+                create_proxy(
+                    record_worker_health(
+                        self.env, "metrics", response.status, latency_ms=elapsed_ms
+                    )
+                )
+            )
+            return response
 
         # PostHog's browser SDK sends capture traffic through api_host.
         # We forward it to PostHog and independently persist the same events
         # to Supabase so the metrics path does not depend on PostHog query latency.
         if is_posthog_path(url.path):
-            return await proxy_posthog(request, url, self.env, cors_headers, self.ctx)
+            response = await proxy_posthog(request, url, self.env, cors_headers, self.ctx)
+            elapsed_ms = (time.monotonic() - start_time) * 1000
+            posthog_failed = response.status >= 500
+            self.ctx.waitUntil(
+                create_proxy(
+                    record_worker_health(
+                        self.env,
+                        "proxy",
+                        response.status,
+                        latency_ms=elapsed_ms,
+                        posthog_proxy_failed=posthog_failed,
+                    )
+                )
+            )
+            return response
 
+        self.ctx.waitUntil(create_proxy(record_worker_health(self.env, "not_found", 404)))
         return Response("Not Found", status=404, headers=cors_headers)
 
 
@@ -296,26 +339,45 @@ async def persist_posthog_payload(payload_bytes, env, query_string=None):
     payload = decode_posthog_body(payload_bytes, query_string)
     if payload is None:
         print("PostHog payload was not valid JSON or decodable data= form")
+        await record_worker_health(env, "proxy", 200, decode_success=False)
         return
 
     events = normalize_posthog_payload(payload)
     if not events:
+        await record_worker_health(env, "proxy", 200, decode_success=True)
         return
 
-    response = await fetch(
-        f"{env.SUPABASE_URL}/rest/v1/rpc/record_site_events",
-        method="POST",
-        headers={
-            "Content-Type": "application/json",
-            "apikey": env.SUPABASE_SERVICE_ROLE_KEY,
-            "Authorization": f"Bearer {env.SUPABASE_SERVICE_ROLE_KEY}",
-        },
-        body=json.dumps({"p_events": events}),
-    )
+    persist_start = time.monotonic()
+    supabase_failed = False
+    try:
+        response = await fetch(
+            f"{env.SUPABASE_URL}/rest/v1/rpc/record_site_events",
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "apikey": env.SUPABASE_SERVICE_ROLE_KEY,
+                "Authorization": f"Bearer {env.SUPABASE_SERVICE_ROLE_KEY}",
+            },
+            body=json.dumps({"p_events": events}),
+        )
 
-    if not response.ok:
-        error_text = await response.text()
-        print(f"Supabase event persistence failed: {response.status} {error_text}")
+        if not response.ok:
+            error_text = await response.text()
+            print(f"Supabase event persistence failed: {response.status} {error_text}")
+            supabase_failed = True
+    except Exception as error:
+        print(f"Supabase event persistence exception: {error}")
+        supabase_failed = True
+
+    persist_ms = (time.monotonic() - persist_start) * 1000
+    await record_worker_health(
+        env,
+        "proxy",
+        200,
+        decode_success=True,
+        persist_latency_ms=persist_ms,
+        supabase_write_failed=supabase_failed,
+    )
 
 
 def normalize_posthog_payload(payload):
@@ -404,6 +466,45 @@ async def handle_metrics(env, cors_headers):
         )
 
 
+async def handle_health_metrics(env, cors_headers):
+    if not getattr(env, "SUPABASE_URL", None) or not getattr(
+        env, "SUPABASE_SERVICE_ROLE_KEY", None
+    ):
+        return Response.json(
+            {"error": "Supabase configuration missing"},
+            status=500,
+            headers=cors_headers,
+        )
+
+    try:
+        response = await supabase_request(env, "/rest/v1/worker_health_stats?select=*")
+        if not response.ok:
+            raise Exception(f"Supabase health query failed: {response.status}")
+
+        rows = await response.json()
+        stats = rows[0] if rows else {}
+
+        return Response(
+            render_health_metrics_html(stats),
+            headers={
+                **cors_headers,
+                "Content-Type": "text/html; charset=utf-8",
+                "Cache-Control": "public, max-age=2, s-maxage=3, stale-while-revalidate=5",
+            },
+        )
+    except Exception as error:
+        print(f"Health metrics query failed: {error}")
+        return Response(
+            '<div class="error">⚠️ Unable to load health metrics</div>',
+            status=503,
+            headers={
+                **cors_headers,
+                "Content-Type": "text/html; charset=utf-8",
+                "Cache-Control": "no-store",
+            },
+        )
+
+
 async def supabase_request(env, path, method="GET"):
     return await fetch(
         f"{env.SUPABASE_URL}{path}",
@@ -413,6 +514,118 @@ async def supabase_request(env, path, method="GET"):
             "Authorization": f"Bearer {env.SUPABASE_SERVICE_ROLE_KEY}",
         },
     )
+
+
+async def record_worker_health(
+    env,
+    request_type,
+    status_code,
+    latency_ms=None,
+    persist_latency_ms=None,
+    decode_success=None,
+    supabase_write_failed=False,
+    posthog_proxy_failed=False,
+):
+    """Fire-and-forget health stats recording to Supabase."""
+    if not getattr(env, "SUPABASE_URL", None) or not getattr(
+        env, "SUPABASE_SERVICE_ROLE_KEY", None
+    ):
+        return
+    try:
+        body = {
+            "p_request_type": request_type,
+            "p_status_code": status_code,
+        }
+        if latency_ms is not None:
+            body["p_latency_ms"] = int(latency_ms)
+        if persist_latency_ms is not None:
+            body["p_persist_latency_ms"] = int(persist_latency_ms)
+        if decode_success is not None:
+            body["p_decode_success"] = decode_success
+        if supabase_write_failed:
+            body["p_supabase_write_failed"] = True
+        if posthog_proxy_failed:
+            body["p_posthog_proxy_failed"] = True
+
+        await fetch(
+            f"{env.SUPABASE_URL}/rest/v1/rpc/record_worker_health",
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "apikey": env.SUPABASE_SERVICE_ROLE_KEY,
+                "Authorization": f"Bearer {env.SUPABASE_SERVICE_ROLE_KEY}",
+            },
+            body=json.dumps(body),
+        )
+    except Exception as error:
+        print(f"Worker health recording failed: {error}")
+
+
+def render_health_metrics_html(stats):
+    total_requests = number(stats.get("total_requests"))
+    total_proxy = number(stats.get("total_proxy_requests"))
+    total_metrics = number(stats.get("total_metrics_requests"))
+    total_health = number(stats.get("total_health_requests"))
+    errors_4xx = number(stats.get("total_errors_4xx"))
+    errors_5xx = number(stats.get("total_errors_5xx"))
+    sb_failures = number(stats.get("total_supabase_write_failures"))
+    ph_failures = number(stats.get("total_posthog_proxy_failures"))
+    decode_fail = number(stats.get("total_decode_failures"))
+    decode_ok = number(stats.get("total_decode_successes"))
+
+    # Compute averages
+    sum_metrics_lat = number(stats.get("sum_metrics_latency_ms"))
+    cnt_metrics_lat = number(stats.get("count_metrics_latency"))
+    avg_metrics_ms = (sum_metrics_lat / cnt_metrics_lat) if cnt_metrics_lat > 0 else 0
+
+    sum_proxy_lat = number(stats.get("sum_proxy_latency_ms"))
+    cnt_proxy_lat = number(stats.get("count_proxy_latency"))
+    avg_proxy_ms = (sum_proxy_lat / cnt_proxy_lat) if cnt_proxy_lat > 0 else 0
+
+    sum_persist_lat = number(stats.get("sum_persist_latency_ms"))
+    cnt_persist_lat = number(stats.get("count_persist_latency"))
+    avg_persist_ms = (sum_persist_lat / cnt_persist_lat) if cnt_persist_lat > 0 else 0
+
+    # Error rate
+    error_rate = ((errors_4xx + errors_5xx) / total_requests * 100) if total_requests > 0 else 0
+
+    # Decode success rate
+    total_decode = decode_ok + decode_fail
+    decode_rate = (decode_ok / total_decode * 100) if total_decode > 0 else 100
+
+    html = f"""
+    <h3>📡 Request Volume</h3>
+    <div class="metric-row"><span class="metric-label">Total Requests</span><span class="metric-value">{fmt(total_requests)}</span></div>
+    <div class="feature-grid">
+      <div class="feature-box"><div class="feature-name">PostHog Proxy</div><div class="feature-count">{fmt(total_proxy)}</div></div>
+      <div class="feature-box"><div class="feature-name">Dashboard</div><div class="feature-count">{fmt(total_metrics)}</div></div>
+      <div class="feature-box"><div class="feature-name">Health Checks</div><div class="feature-count">{fmt(total_health)}</div></div>
+      <div class="feature-box"><div class="feature-name">Error Rate</div><div class="feature-count">{error_rate:.1f}%</div></div>
+    </div>
+    <h3>⏱️ Avg Latency</h3>
+    <div class="metric-row"><span class="metric-label">Dashboard Render</span><span class="metric-value">{avg_metrics_ms:.0f} ms</span></div>
+    <div class="metric-row"><span class="metric-label">PostHog Proxy Round-Trip</span><span class="metric-value">{avg_proxy_ms:.0f} ms</span></div>
+    <div class="metric-row"><span class="metric-label">Supabase Persist (bg)</span><span class="metric-value">{avg_persist_ms:.0f} ms</span></div>
+    <h3>🛡️ Pipeline Health</h3>
+    <div class="metric-row"><span class="metric-label">Payload Decode Success Rate</span><span class="metric-value">{decode_rate:.1f}%</span></div>
+    <div class="metric-row"><span class="metric-label">4xx Errors</span><span class="metric-value">{fmt(errors_4xx)}</span></div>
+    <div class="metric-row"><span class="metric-label">5xx Errors</span><span class="metric-value">{fmt(errors_5xx)}</span></div>
+    <div class="metric-row"><span class="metric-label">Supabase Write Failures</span><span class="metric-value">{fmt(sb_failures)}</span></div>
+    <div class="metric-row"><span class="metric-label">PostHog Proxy Failures</span><span class="metric-value">{fmt(ph_failures)}</span></div>
+    """
+
+    raw_updated_at = stats.get("updated_at") or datetime.now(UTC).isoformat()
+    updated_at = stats.get("updated_at")
+    if updated_at:
+        try:
+            updated = datetime.fromisoformat(updated_at.replace("Z", "+00:00")).strftime("%H:%M:%S")
+        except ValueError:
+            updated = updated_at
+    else:
+        updated = "—"
+
+    html += f'<div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(0,212,255,.2);font-size:.8rem;color:#666;">Last updated: <span class="metrics-timestamp" data-utc="{escape_html(raw_updated_at)}">{escape_html(updated)}</span></div>'
+    return html
 
 
 def render_metrics_html(summary, event_rows):

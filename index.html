@@ -82,8 +82,19 @@
         <div class="modal-content" id="modal-content">
             <button class="modal-close" title="Close">✕</button>
             <h2>🐶 BoopMaster 3000 Stats</h2>
-            <div id="metrics-container" hx-swap="innerHTML">
-                <div class="loading" id="metrics-loading">📊 Loading metrics...</div>
+            <div class="tab-bar">
+                <button class="tab-btn active" data-tab="engagement">📊 Engagement</button>
+                <button class="tab-btn" data-tab="health">🛠️ System Health</button>
+            </div>
+            <div id="tab-engagement" class="tab-panel active">
+                <div id="metrics-container" hx-swap="innerHTML">
+                    <div class="loading" id="metrics-loading">📊 Loading metrics...</div>
+                </div>
+            </div>
+            <div id="tab-health" class="tab-panel">
+                <div id="health-container" hx-swap="innerHTML">
+                    <div class="loading">🛠️ Loading health data...</div>
+                </div>
             </div>
         </div>
     </div>

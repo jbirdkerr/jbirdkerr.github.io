@@ -1,0 +1,13 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Prompt from '../components/Prompt.astro';
+import ProjectCard from '../components/ProjectCard.astro';
+
+const projects = (await getCollection('projects')).sort((a, b) => a.data.order - b.data.order);
+---
+
+<BaseLayout title="Projects" description="Experiments, each on its own subdomain.">
+  <Prompt cmd="ls -la /experiments/" />
+  {projects.map((project) => <ProjectCard project={project} />)}
+</BaseLayout>

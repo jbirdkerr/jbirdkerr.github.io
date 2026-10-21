@@ -44,6 +44,8 @@ except ImportError:  # pragma: no cover
 ALLOWED_ORIGINS = {
     "https://jbirdkerr.net",
     "https://www.jbirdkerr.net",
+    "https://boopmaster3000.jbirdkerr.net",
+    "https://henry.jbirdkerr.net",
     "https://jbirdkerr.github.io",
 }
 

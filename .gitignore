@@ -5,3 +5,9 @@ scratch/
 .pi/
 .wrangler/
 __pycache__/
+node_modules/
+.ruff_cache/
+.venv/
+dist/
+.astro/
+.pants.d/

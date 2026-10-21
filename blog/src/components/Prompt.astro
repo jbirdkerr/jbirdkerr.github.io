@@ -1,0 +1,10 @@
+---
+// A shell-style prompt line used as a section heading, e.g. `$ ls -la /posts/`.
+interface Props { cmd: string }
+const { cmd } = Astro.props;
+---
+
+<h2 class="mb-6 font-mono text-sm font-normal text-gray-400">
+  <span class="text-green-400" aria-hidden="true">$</span>
+  {cmd}
+</h2>

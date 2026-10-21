@@ -1,0 +1,22 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Prompt from '../../components/Prompt.astro';
+import PostCard from '../../components/PostCard.astro';
+import { getPosts } from '../../lib/posts';
+
+const posts = await getPosts();
+---
+
+<BaseLayout title="Blog" description="All posts.">
+  <Prompt cmd="ls -la /posts/" />
+  {
+    posts.length > 0 ? (
+      posts.map((post) => <PostCard post={post} />)
+    ) : (
+      <div class="terminal-border rounded-lg bg-black/40 p-10 text-center">
+        <p class="mb-2 text-yellow-400"><span class="text-red-400">!</span> No posts found</p>
+        <p class="text-sm text-gray-500">Add a Markdown file to src/content/blog/ to publish one.</p>
+      </div>
+    )
+  }
+</BaseLayout>

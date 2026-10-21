@@ -1,0 +1,30 @@
+---
+import type { Post } from '../lib/posts';
+import { formatDate } from '../lib/posts';
+
+interface Props { post: Post }
+const { post } = Astro.props;
+const { title, description, pubDate, tags, draft } = post.data;
+---
+
+<article
+  class="terminal-border group relative mb-6 rounded-lg bg-black/40 p-6 backdrop-blur-sm transition-all hover:bg-black/60 hover:shadow-xl hover:shadow-blue-500/20"
+>
+  <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+    <h3 class="text-xl font-bold text-blue-300 transition-colors group-hover:text-blue-400">
+      <a href={`/blog/${post.id}/`} class="after:absolute after:inset-0 after:content-['']">
+        {title}
+      </a>
+      {draft && <span class="ml-2 text-xs font-normal text-yellow-400">draft</span>}
+    </h3>
+    <time class="shrink-0 text-xs text-gray-500" datetime={pubDate.toISOString()}>{formatDate(pubDate)}</time>
+  </div>
+  <p class="mb-3 text-sm leading-relaxed text-gray-400">{description}</p>
+  {
+    tags.length > 0 && (
+      <ul class="flex flex-wrap gap-x-3 text-xs text-purple-400">
+        {tags.map((tag) => <li>#{tag}</li>)}
+      </ul>
+    )
+  }
+</article>

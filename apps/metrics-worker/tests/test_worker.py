@@ -117,6 +117,11 @@ class TestMetricsWorker(unittest.TestCase):
         self.assertEqual(
             headers_allowed.get("Access-Control-Allow-Origin"), "https://jbirdkerr.net"
         )
+        headers_boopmaster = get_cors_headers("https://boopmaster3000.jbirdkerr.net")
+        self.assertEqual(
+            headers_boopmaster.get("Access-Control-Allow-Origin"),
+            "https://boopmaster3000.jbirdkerr.net",
+        )
 
         headers_disallowed = get_cors_headers("https://malicious-site.example.com")
         self.assertNotIn("Access-Control-Allow-Origin", headers_disallowed)

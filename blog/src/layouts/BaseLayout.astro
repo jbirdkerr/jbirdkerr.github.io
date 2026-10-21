@@ -1,0 +1,95 @@
+---
+import '@fontsource/jetbrains-mono/400.css';
+import '@fontsource/jetbrains-mono/500.css';
+import '@fontsource/jetbrains-mono/700.css';
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+  description?: string;
+  type?: 'website' | 'article';
+}
+
+const SITE_TITLE = 'jbirdkerr.net';
+const DEFAULT_DESCRIPTION = 'Notes and experiments from jbirdkerr.';
+const { title, description = DEFAULT_DESCRIPTION, type = 'website' } = Astro.props;
+const fullTitle = title ? `${title} | ${SITE_TITLE}` : SITE_TITLE;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+const path = Astro.url.pathname;
+
+const links = [
+  { href: '/blog/', label: 'blog' },
+  { href: '/projects/', label: 'projects' },
+  { href: '/about/', label: 'about' },
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="alternate" type="application/rss+xml" title={SITE_TITLE} href="/rss.xml" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <meta property="og:site_name" content={SITE_TITLE} />
+    <meta property="og:type" content={type} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta name="theme-color" content="#0a0e27" />
+  </head>
+  <body class="grid-bg min-h-screen flex flex-col text-gray-100 antialiased">    
+
+    <a
+      href="#main"
+      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[70] focus:bg-black focus:px-3 focus:py-2 focus:text-blue-300"
+    >
+      Skip to content
+    </a>
+
+    <header class="sticky top-0 z-50 border-b border-blue-500/30 bg-black/40 backdrop-blur-sm">
+      <nav class="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-4" aria-label="Main">
+        <a href="/" class="glow flex items-center gap-2 text-lg font-bold text-blue-400 hover:text-blue-300">
+          <span class="text-green-400" aria-hidden="true">&gt;</span>jbirdkerr.net<span class="cursor text-blue-400" aria-hidden="true">_</span>
+        </a>
+        <ul class="flex items-center gap-4 text-sm sm:gap-6">
+          {
+            links.map((link) => {
+              const active = path.startsWith(link.href);
+              return (
+                <li>
+                  <a
+                    href={link.href}
+                    aria-current={active ? 'page' : undefined}
+                    class:list={[
+                      'transition-colors hover:text-blue-300',
+                      active ? 'text-blue-400' : 'text-gray-400',
+                    ]}
+                  >
+                    {link.label}
+                  </a>
+                </li>
+              );
+            })
+          }
+        </ul>
+      </nav>
+    </header>
+
+    <main id="main" class="mx-auto w-full max-w-4xl flex-1 px-4 py-8">
+      <slot />
+    </main>
+
+    <footer class="mt-16 pb-8 text-center text-xs text-gray-500">
+      <div class="mb-2">
+        status: <span class="text-green-400">operational</span> · <a class="hover:text-blue-300" href="/rss.xml">rss</a>
+      </div>
+      <div>built with <span class="text-purple-400">astro</span></div>
+    </footer>
+  </body>
+</html>

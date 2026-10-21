@@ -1,0 +1,15 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Prompt from '../components/Prompt.astro';
+---
+
+<BaseLayout title="About" description="About this site.">
+  <Prompt cmd="cat about.md" />
+  <div class="post-body prose max-w-none">
+    <p>Replace this with a short introduction: who you are, what you work on, and how to reach you.</p>
+    <p>
+      This site is a static Astro blog. Experiments live on separate subdomains and share one small
+      analytics worker.
+    </p>
+  </div>
+</BaseLayout>

@@ -1,0 +1,41 @@
+---
+import { render } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Giscus from '../../components/Giscus.astro';
+import { getPosts, formatDate, readingMinutes } from '../../lib/posts';
+
+export async function getStaticPaths() {
+  const posts = await getPosts();
+  return posts.map((post) => ({ params: { id: post.id }, props: { post } }));
+}
+
+const { post } = Astro.props;
+const { title, description, pubDate, updatedDate, tags } = post.data;
+const { Content } = await render(post);
+---
+
+<BaseLayout title={title} description={description} type="article">
+  <p class="mb-6 text-xs text-gray-500">
+    <a href="/blog/" class="text-blue-400 hover:text-blue-300"><span class="text-green-400" aria-hidden="true">&lt;</span> cd ../</a>
+  </p>
+
+  <article class="terminal-border rounded-lg bg-black/40 p-6 shadow-xl shadow-blue-500/10 backdrop-blur-sm sm:p-8">
+    <header class="mb-6 border-b border-blue-500/20 pb-6">
+      <h1 class="glow mb-3 text-3xl font-bold text-blue-300">{title}</h1>
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
+        <span><span class="text-purple-400">date:</span> <time datetime={pubDate.toISOString()}>{formatDate(pubDate)}</time></span>
+        {updatedDate && <span><span class="text-purple-400">updated:</span> <time datetime={updatedDate.toISOString()}>{formatDate(updatedDate)}</time></span>}
+        <span><span class="text-purple-400">read:</span> {readingMinutes(post.body)} min</span>
+        {tags.length > 0 && <span class="text-purple-400">{tags.map((t) => `#${t}`).join(' ')}</span>}
+      </div>
+    </header>
+
+    <div class="post-body prose prose-lg max-w-none">
+      <Content />
+    </div>
+
+    <footer class="mt-8 border-t border-blue-500/20 pt-6 text-xs text-green-400">EOF</footer>
+  </article>
+
+  <Giscus />
+</BaseLayout>

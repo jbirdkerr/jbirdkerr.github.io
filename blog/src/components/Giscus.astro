@@ -1,0 +1,59 @@
+---
+// Comments backed by GitHub Discussions. Configure via PUBLIC_GISCUS_* env vars
+// (get the values from https://giscus.app). Renders nothing until they are set.
+const repo = import.meta.env.PUBLIC_GISCUS_REPO;
+const repoId = import.meta.env.PUBLIC_GISCUS_REPO_ID;
+const category = import.meta.env.PUBLIC_GISCUS_CATEGORY;
+const categoryId = import.meta.env.PUBLIC_GISCUS_CATEGORY_ID;
+const enabled = Boolean(repo && repoId && category && categoryId);
+---
+
+{
+  enabled && (
+    <section aria-labelledby="comments-heading" class="mt-12">
+      <h2 id="comments-heading" class="mb-4 font-mono text-sm font-normal text-gray-400">
+        <span class="text-green-400" aria-hidden="true">$</span> tail -f comments.log
+      </h2>
+      <p class="mb-4 text-xs text-gray-500">
+        Comments load from GitHub Discussions and need a GitHub account to post.
+      </p>
+      <div id="giscus-mount" data-repo={repo} data-repo-id={repoId} data-category={category} data-category-id={categoryId} />
+    </section>
+  )
+}
+
+<script>
+  // Load giscus only when the comment section scrolls near the viewport.
+  const mount = document.getElementById('giscus-mount');
+  if (mount) {
+    const load = () => {
+      const s = document.createElement('script');
+      s.src = 'https://giscus.app/client.js';
+      s.async = true;
+      s.crossOrigin = 'anonymous';
+      s.setAttribute('data-repo', mount.dataset.repo ?? '');
+      s.setAttribute('data-repo-id', mount.dataset.repoId ?? '');
+      s.setAttribute('data-category', mount.dataset.category ?? '');
+      s.setAttribute('data-category-id', mount.dataset.categoryId ?? '');
+      s.setAttribute('data-mapping', 'pathname');
+      s.setAttribute('data-strict', '1');
+      s.setAttribute('data-reactions-enabled', '1');
+      s.setAttribute('data-emit-metadata', '0');
+      s.setAttribute('data-input-position', 'top');
+      s.setAttribute('data-theme', 'transparent_dark');
+      s.setAttribute('data-lang', 'en');
+      s.setAttribute('data-loading', 'lazy');
+      mount.appendChild(s);
+    };
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          io.disconnect();
+          load();
+        }
+      },
+      { rootMargin: '400px' },
+    );
+    io.observe(mount);
+  }
+</script>

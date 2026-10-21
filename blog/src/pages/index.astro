@@ -1,0 +1,38 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Prompt from '../components/Prompt.astro';
+import PostCard from '../components/PostCard.astro';
+import ProjectCard from '../components/ProjectCard.astro';
+import { getPosts } from '../lib/posts';
+
+const posts = (await getPosts()).slice(0, 5);
+const projects = (await getCollection('projects')).sort((a, b) => a.data.order - b.data.order);
+---
+
+<BaseLayout>
+  <section class="mb-12">
+    <Prompt cmd="whoami" />
+    <p class="text-gray-300 leading-relaxed">
+      I build small, strange things for the web and write down what I learn. The experiments live on their
+      own subdomains; the notes live here.
+    </p>
+  </section>
+
+  <section class="mb-12">
+    <Prompt cmd="ls -la /experiments/" />
+    {projects.map((project) => <ProjectCard project={project} />)}
+  </section>
+
+  <section>
+    <Prompt cmd="ls -lt /posts/ | head -5" />
+    {
+      posts.length > 0 ? (
+        posts.map((post) => <PostCard post={post} />)
+      ) : (
+        <p class="text-sm text-gray-500">No posts yet. Add a Markdown file to src/content/blog/.</p>
+      )
+    }
+    <a href="/blog/" class="text-sm text-blue-400 hover:text-blue-300">all posts</a>
+  </section>
+</BaseLayout>

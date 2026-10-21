@@ -1,0 +1,48 @@
+# deploy/units.toml
+# Deployable unit manifest for jbirdkerr.net monorepo.
+# Defines the relationship between path changes, Pants targets, and deployment environments.
+
+[units.blog]
+name = "blog"
+paths = ["blog/**"]
+host = "github-pages"
+build = "blog:dist"
+deploy = "blog:deploy"
+depends_on = []
+environments = ["production"]
+
+[units.boopmaster]
+name = "boopmaster"
+paths = ["apps/boopmaster/**"]
+host = "cloudflare-pages"
+build = "apps/boopmaster:dist"
+deploy = "apps/boopmaster:deploy"
+depends_on = []
+environments = ["preview", "production"]
+
+[units.db]
+name = "db"
+paths = ["db/supabase/migrations/**"]
+host = "supabase"
+build = "db/supabase:files"
+deploy = "db/supabase:push"
+depends_on = []
+environments = ["preview", "production"]
+
+[units.metrics-worker]
+name = "metrics-worker"
+paths = ["apps/metrics-worker/**"]
+host = "cloudflare-worker"
+build = "apps/metrics-worker:dist"
+deploy = "apps/metrics-worker:deploy"
+depends_on = ["db"]
+environments = ["preview", "production"]
+
+# [units.url-shortener]
+# name = "url-shortener"
+# paths = ["apps/url-shortener/**"]
+# host = "cloudflare-worker"
+# build = "apps/url-shortener:dist"
+# deploy = "apps/url-shortener:deploy"
+# depends_on = ["db"]
+# environments = ["preview", "production"]

@@ -18,5 +18,6 @@ enable_resolves = false
 [python-bootstrap]
 search_path = [
     "%(homedir)s/.local/share/uv/python/*/bin",
+    "%(homedir)s/.uv/python/*/bin",
     "<PATH>",
 ]

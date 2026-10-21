@@ -11,9 +11,7 @@ import fnmatch
 import json
 import os
 import subprocess
-import sys
 import tomllib
-from pathlib import Path
 
 
 def load_manifest(manifest_path="deploy/units.toml"):
@@ -118,18 +116,12 @@ def main():
     )
     parser.add_argument("--base", default=None, help="Base git commit/ref")
     parser.add_argument("--head", default=None, help="Head git commit/ref")
-    parser.add_argument(
-        "--manifest", default="deploy/units.toml", help="Path to units manifest"
-    )
-    parser.add_argument(
-        "--all", action="store_true", help="Force treat all units as affected"
-    )
+    parser.add_argument("--manifest", default="deploy/units.toml", help="Path to units manifest")
+    parser.add_argument("--all", action="store_true", help="Force treat all units as affected")
     parser.add_argument(
         "--github-output", action="store_true", help="Write step outputs to GITHUB_OUTPUT"
     )
-    parser.add_argument(
-        "--json", action="store_true", help="Print result as JSON"
-    )
+    parser.add_argument("--json", action="store_true", help="Print result as JSON")
     args = parser.parse_args()
 
     units = load_manifest(args.manifest)

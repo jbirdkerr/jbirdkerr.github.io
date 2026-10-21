@@ -1,8 +1,9 @@
 import unittest
+
 from scripts.detect_changed_units import (
-    matches_patterns,
     detect_affected_units,
     get_topological_order,
+    matches_patterns,
 )
 
 
@@ -34,7 +35,9 @@ class TestDetectChangedUnits(unittest.TestCase):
     def test_matches_patterns(self):
         self.assertTrue(matches_patterns("blog/src/pages/index.astro", ["blog/**"]))
         self.assertFalse(matches_patterns("apps/boopmaster/index.html", ["blog/**"]))
-        self.assertTrue(matches_patterns("db/supabase/migrations/01.sql", ["db/supabase/migrations/**"]))
+        self.assertTrue(
+            matches_patterns("db/supabase/migrations/01.sql", ["db/supabase/migrations/**"])
+        )
 
     def test_detect_affected_units_direct(self):
         changed = ["blog/src/index.astro"]

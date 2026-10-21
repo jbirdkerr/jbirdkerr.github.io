@@ -1,0 +1,22 @@
+[GLOBAL]
+pants_version = "2.24.1"
+backend_packages = [
+    "pants.backend.python",
+    "pants.backend.shell",
+]
+
+[source]
+root_patterns = [
+    "apps/*",
+    "packages/*",
+]
+
+[python]
+interpreter_constraints = [">=3.12,<3.13"]
+enable_resolves = false
+
+[python-bootstrap]
+search_path = [
+    "%(homedir)s/.local/share/uv/python/*/bin",
+    "<PATH>",
+]

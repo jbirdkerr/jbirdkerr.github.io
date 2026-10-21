@@ -3,7 +3,7 @@ account_id = "1dcd86d2743bff3ea34323e58ee7470f"
 workers_dev = true
 compatibility_date = "2026-09-22"  # bumped from 2025-08-14 — verify against latest Cloudflare release notes
 compatibility_flags = ["python_workers", "disable_python_external_sdk"]
-main = "./metrics-worker/worker.py"
+main = "worker.py"
 
 [vars]
 POSTHOG_PROJECT_ID = "566829"

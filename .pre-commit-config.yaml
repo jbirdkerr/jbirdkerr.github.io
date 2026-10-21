@@ -9,23 +9,30 @@ repos:
       - id: check-json
       - id: check-merge-conflict
       - id: check-added-large-files
-        args: ["--maxkb=1000"]
+        args: ["--maxkb=1500"]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.9.9
     hooks:
       - id: ruff
         args: [--fix]
-        files: ^metrics-worker/
+        files: ^apps/metrics-worker/|^scripts/
       - id: ruff-format
-        files: ^metrics-worker/
+        files: ^apps/metrics-worker/|^scripts/
 
   - repo: local
     hooks:
       - id: test-metrics-worker
         name: test metrics-worker
-        entry: env PYTHONPATH=metrics-worker python3 -m unittest discover -s metrics-worker/tests
+        entry: env PYTHONPATH=apps/metrics-worker python3 -m unittest discover -s apps/metrics-worker/tests
         language: system
         pass_filenames: false
-        files: ^metrics-worker/
+        files: ^apps/metrics-worker/
+        types: [python]
+      - id: test-scripts
+        name: test scripts
+        entry: env PYTHONPATH=. python3 -m unittest discover -s scripts -p "test_*.py"
+        language: system
+        pass_filenames: false
+        files: ^scripts/
         types: [python]

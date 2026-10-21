@@ -1,0 +1,185 @@
+name: CI / CD
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      force_deploy_all:
+        description: "Force deploy all units regardless of diff"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Lint, Test & Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python 3.12 via uv
+        run: uv python install 3.12
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: "blog/package-lock.json"
+
+      - name: Run pre-commit hooks
+        run: uv run pre-commit run --all-files
+
+      - name: Run script tests
+        run: PYTHONPATH=. uv run python -m unittest scripts/test_detect_changed_units.py
+
+      - name: Run Pants tests across monorepo
+        run: |
+          ./pants --version
+          ./pants test ::
+
+  deploy:
+    name: Deploy Affected Units
+    needs: validate
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ steps.deploy_pages.outputs.page_url }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: "blog/package-lock.json"
+
+      - name: Detect affected units
+        id: detect
+        run: |
+          if [ "${{ inputs.force_deploy_all }}" = "true" ]; then
+            python3 scripts/detect_changed_units.py --all --github-output
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            python3 scripts/detect_changed_units.py --base HEAD~1 --github-output
+          else
+            python3 scripts/detect_changed_units.py --base "${{ github.event.before }}" --github-output || python3 scripts/detect_changed_units.py --base HEAD~1 --github-output
+          fi
+
+      # -------------------------------------------------------------
+      # 1. Database Migrations (Supabase) - Runs first
+      # -------------------------------------------------------------
+      - name: Apply Supabase migrations
+        if: steps.detect.outputs.db == 'true'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          echo "Applying Supabase migrations..."
+          if [ -n "$SUPABASE_ACCESS_TOKEN" ]; then
+            npx supabase db push
+          else
+            echo "SUPABASE_ACCESS_TOKEN not set; skipping live migration push."
+          fi
+
+      # -------------------------------------------------------------
+      # 2. Boopmaster (Cloudflare Pages)
+      # -------------------------------------------------------------
+      - name: Deploy Boopmaster to Cloudflare Pages
+        if: steps.detect.outputs.boopmaster == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "Deploying Boopmaster to Cloudflare Pages..."
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            npx wrangler pages deploy apps/boopmaster --project-name boopmaster3000 --branch main
+          else
+            echo "CLOUDFLARE_API_TOKEN not set; skipping Cloudflare Pages deploy."
+          fi
+
+      # -------------------------------------------------------------
+      # 3. Metrics Worker (Cloudflare Worker)
+      # -------------------------------------------------------------
+      - name: Deploy Metrics Worker to Cloudflare Workers
+        if: steps.detect.outputs.metrics_worker == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "Deploying Metrics Worker to Cloudflare..."
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            cd apps/metrics-worker && npx wrangler deploy --env production
+          else
+            echo "CLOUDFLARE_API_TOKEN not set; skipping Cloudflare Worker deploy."
+          fi
+
+      # -------------------------------------------------------------
+      # 4. Blog (GitHub Pages)
+      # -------------------------------------------------------------
+      - name: Build Blog
+        if: steps.detect.outputs.blog == 'true'
+        run: |
+          cd blog
+          npm ci
+          npm run build
+          # Verify CNAME is present in dist
+          if [ -f public/CNAME ]; then
+            cp public/CNAME dist/CNAME
+          fi
+
+      - name: Upload GitHub Pages artifact
+        if: steps.detect.outputs.blog == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: blog/dist
+
+      - name: Deploy to GitHub Pages
+        if: steps.detect.outputs.blog == 'true'
+        id: deploy_pages
+        uses: actions/deploy-pages@v4
+
+      # -------------------------------------------------------------
+      # 5. Smoke Tests
+      # -------------------------------------------------------------
+      - name: Post-deploy Smoke Tests
+        if: steps.detect.outputs.any_changed == 'true'
+        run: |
+          echo "Running post-deploy smoke checks..."
+          if [ "${{ steps.detect.outputs.metrics_worker }}" = "true" ]; then
+            echo "Checking metrics worker health..."
+            curl --fail --retry 3 --retry-delay 5 https://metrics-api.jbirdkerr.net/health || echo "Metrics worker check finished"
+          fi
+          if [ "${{ steps.detect.outputs.blog }}" = "true" ]; then
+            echo "Checking main blog..."
+            curl --fail --retry 3 --retry-delay 5 -I https://jbirdkerr.net || echo "Blog check finished"
+          fi

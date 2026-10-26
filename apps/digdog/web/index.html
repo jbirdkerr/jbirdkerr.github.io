@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DigDog</title>
+  <meta name="description" content="DigDog: a pixel-art card-matching game where a dog digs up the cards." />
+  <style>
+    html, body { margin: 0; height: 100%; background: #0a0e27; color: #d1d5db; font-family: ui-monospace, monospace; }
+    canvas { display: block; }
+    noscript { display: block; padding: 2rem; text-align: center; }
+  </style>
+</head>
+<body>
+  <noscript>DigDog needs JavaScript and WebAssembly. Click or tap a mound to dig up a card and match the pairs.</noscript>
+  <script src="wasm_exec.js"></script>
+  <script>
+    const go = new Go();
+    WebAssembly.instantiateStreaming(fetch("digdog.wasm"), go.importObject)
+      .then((result) => go.run(result.instance))
+      .catch((err) => { document.body.textContent = "Could not load the game: " + err; });
+  </script>
+</body>
+</html>

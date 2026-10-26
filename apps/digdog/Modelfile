@@ -1,0 +1,10 @@
+# Create with:  ollama create qwen2.5-coder-agent -f Modelfile
+# Change the tag to whichever qwen2.5-coder size you pulled.
+FROM qwen2.5-coder:7b
+
+# Agents need room for the system prompt, AGENTS.md, and file reads.
+# Raise this if you have RAM to spare; lower it if responses get very slow.
+PARAMETER num_ctx 16384
+
+# Low temperature keeps code edits predictable.
+PARAMETER temperature 0.2

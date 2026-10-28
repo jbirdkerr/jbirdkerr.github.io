@@ -3,15 +3,16 @@ import { getCollection } from 'astro:content';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Prompt from '../components/Prompt.astro';
 import PostCard from '../components/PostCard.astro';
-import ProjectCard from '../components/ProjectCard.astro';
+import ProjectRailCard from '../components/ProjectRailCard.astro';
 import { getPosts } from '../lib/posts';
 
-const posts = (await getPosts()).slice(0, 5);
+const posts = (await getPosts()).slice(0, 6);
 const projects = (await getCollection('projects')).sort((a, b) => a.data.order - b.data.order);
 ---
 
 <BaseLayout>
-  <section class="mb-12">
+  <!-- Hero / intro -->
+  <section class="mb-10">
     <Prompt cmd="whoami" />
     <p class="text-gray-300 leading-relaxed">
       I build small, strange things for the web and write down what I learn. The experiments live on their
@@ -19,20 +20,36 @@ const projects = (await getCollection('projects')).sort((a, b) => a.data.order -
     </p>
   </section>
 
-  <section class="mb-12">
-    <Prompt cmd="ls -la /experiments/" />
-    {projects.map((project) => <ProjectCard project={project} />)}
-  </section>
+  <!-- Two-column layout: blog roll (main) + projects rail (sidebar) -->
+  <div class="flex flex-col gap-8 lg:flex-row lg:items-start lg:gap-10">
 
-  <section>
-    <Prompt cmd="ls -lt /posts/ | head -5" />
-    {
-      posts.length > 0 ? (
-        posts.map((post) => <PostCard post={post} />)
-      ) : (
-        <p class="text-sm text-gray-500">No posts yet. Add a Markdown file to src/content/blog/.</p>
-      )
-    }
-    <a href="/blog/" class="text-sm text-blue-400 hover:text-blue-300">all posts</a>
-  </section>
+    <!-- Blog roll -->
+    <section class="min-w-0 flex-1">
+      <Prompt cmd="ls -lt /posts/ | head -6" />
+      {
+        posts.length > 0 ? (
+          <div class="space-y-4">
+            {posts.map((post) => <PostCard post={post} />)}
+          </div>
+        ) : (
+          <p class="text-sm text-gray-500">No posts yet. Add a Markdown file to src/content/blog/.</p>
+        )
+      }
+      <a href="/blog/" class="mt-6 inline-block text-sm text-blue-400 hover:text-blue-300">
+        all posts →
+      </a>
+    </section>
+
+    <!-- Projects side rail -->
+    <aside class="w-full lg:w-64 lg:shrink-0" aria-label="Projects">
+      <Prompt cmd="ls /experiments/" />
+      <div class="space-y-3">
+        {projects.map((project) => <ProjectRailCard project={project} />)}
+      </div>
+      <a href="/projects/" class="mt-4 inline-block text-xs text-blue-400 hover:text-blue-300">
+        all projects →
+      </a>
+    </aside>
+
+  </div>
 </BaseLayout>

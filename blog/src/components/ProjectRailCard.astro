@@ -1,0 +1,24 @@
+---
+import type { CollectionEntry } from 'astro:content';
+
+interface Props { project: CollectionEntry<'projects'> }
+const { project } = Astro.props;
+const { title, description, url, repo, stack } = project.data;
+const host = new URL(url).host;
+---
+
+<article class="terminal-border group relative rounded-lg bg-black/40 p-4 backdrop-blur-sm transition-all hover:bg-black/60 hover:shadow-lg hover:shadow-blue-500/10">
+  <h3 class="mb-1 text-sm font-bold leading-snug text-blue-300">
+    <a href={url} class="hover:text-blue-400 after:absolute after:inset-0 after:content-['']">{title}</a>
+  </h3>
+  <p class="mb-2 text-xs leading-relaxed text-gray-400">{description}</p>
+  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+    <a href={url} class="text-blue-400 hover:text-blue-300 relative z-10">{host}</a>
+    {repo && <a href={repo} class="text-gray-500 hover:text-blue-300 relative z-10">source</a>}
+  </div>
+  {stack.length > 0 && (
+    <ul class="mt-2 flex flex-wrap gap-x-2 text-[10px] text-purple-400/70">
+      {stack.map((s) => <li>{s}</li>)}
+    </ul>
+  )}
+</article>

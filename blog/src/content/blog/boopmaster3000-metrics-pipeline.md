@@ -3,7 +3,7 @@ title: A very serious boop counter
 description: A goofy dog-photo experiment grew into a full analytics pipeline, one free-tier constraint at a time.
 pubDate: 2026-10-19
 tags: [boopmaster3000, javascript, metrics]
-draft: true
+draft: false
 ---
 
 I've owned the domain `jbirdkerr.net` for more than 15 years at this point. For the past three years, it used my infamous Henrybeard photo as a placeholder. I wanted to do something goofy with it: take an ordinary dog photo, make it interactive, and see how far I could get with general-purpose JavaScript, free-tier hosting, and maybe a little python if I felt squirrely.

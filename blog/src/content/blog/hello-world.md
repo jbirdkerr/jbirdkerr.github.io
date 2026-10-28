@@ -15,9 +15,6 @@ subdomain. Other projects and experiments to come!
 - Comments come from GitHub Discussions via [giscus](https://github.com/giscus/giscus).
 
 ```js
-// code blocks are highlighted at build time
 const status = 'operational';
 console.log(status);
 ```
-
-> Delete this post once you have written a real one.

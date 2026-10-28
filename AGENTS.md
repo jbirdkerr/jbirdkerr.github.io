@@ -5,8 +5,8 @@ Repository-wide guidance for AI agents working in this monorepo. For the human-f
 ## Verify current behavior
 
 - Treat tracked source, tests, and `.github/workflows/` as evidence of what runs today. `repo-spec.md` is marked draft and contains design proposals and older assumptions; use it for intent, not as proof of current deployment behavior.
-- The main workflow, [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml), validates pull requests and pushes to `main`. Its deploy job runs only for `main` pushes or manual dispatch and has steps for Supabase migrations, Boopmaster, the metrics worker, and the blog.
-- DigDog has its own path-filtered workflow in [`.github/workflows/digdog.yml`](.github/workflows/digdog.yml). Check both workflows and `deploy/units.toml` before changing build or deployment behavior; the manifest is not a substitute for reading the workflows.
+- The main workflow, [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml), validates pull requests and pushes to `main`. Its deploy job runs only for `main` pushes or manual dispatch and has steps for Supabase migrations, Boopmaster, DigDog, the metrics worker, and the blog.
+- DigDog's Go vet/tests and WebAssembly vet/build run in the main validation job. Its production deployment downloads the validated build artifact and runs only when `deploy/units.toml` marks `digdog` as affected. The manifest detects changed units; it does not create build or deploy steps by itself.
 
 ## Project map
 
@@ -14,7 +14,7 @@ Repository-wide guidance for AI agents working in this monorepo. For the human-f
 | --- | --- | --- |
 | Main site | `blog/` | Astro blog and portfolio. Read `blog/AGENTS.md`; keep its public routes and CNAME stable. |
 | Boopmaster | `apps/boopmaster/` | Static JavaScript/WebAudio dog-photo app; deployed to Cloudflare Pages by the main workflow. |
-| DigDog | `apps/digdog/` | Go/Ebitengine game compiled to WebAssembly; read `apps/digdog/README.md`; separate workflow. |
+| DigDog | `apps/digdog/` | Go/Ebitengine game compiled to WebAssembly; read `apps/digdog/README.md`; checked and deployed by the main workflow. |
 | Metrics worker | `apps/metrics-worker/` | Python Cloudflare Worker, PostHog proxy, Supabase metrics API, tests, and docs. |
 | Database | `db/supabase/` | Supabase config, schemas, seed data, and timestamped PostgreSQL migrations. |
 | URL shortener | `apps/url-shortener/` | Design spec only; no service implementation or active deployment workflow yet. |
@@ -37,7 +37,7 @@ Run checks that cover the files changed; do not claim a check ran unless it did.
 
 - Main CI runs `uv run pre-commit run --all-files`, script tests, and `./pants test ::`.
 - Blog changes: `cd blog && npm ci && npm run build`.
-- DigDog changes: `cd apps/digdog && ./check.sh` (Go formatting, WebAssembly vet/build, and Go tests).
+- DigDog: main CI runs Go vet/tests and the WebAssembly vet/build on every workflow run. Locally, `cd apps/digdog && ./check.sh` runs the same core checks.
 - The metrics-worker tests are included in pre-commit and CI; its tests live in `apps/metrics-worker/tests/`.
 
 When handing off, summarize the files changed, checks actually run, and any remaining deployment or environment-dependent verification.

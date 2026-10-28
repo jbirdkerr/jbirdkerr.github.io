@@ -6,15 +6,15 @@ tags: [boopmaster3000, javascript, metrics]
 draft: true
 ---
 
-jbirdkerr.net used to be a Henrybeard photo and a placeholder. I wanted to do something goofy with it: take an ordinary dog photo, make it interactive, and see how far I could get with general-purpose JavaScript and free-tier hosting.
+I've owned the domain `jbirdkerr.net` for more than 15 years at this point. For the past three years, it used my infamous Henrybeard photo as a placeholder. I wanted to do something goofy with it: take an ordinary dog photo, make it interactive, and see how far I could get with general-purpose JavaScript, free-tier hosting, and maybe a little python if I felt squirrely.
 
 That turned into Boopmaster3000. Booping the snoot was the fun part. Naturally, the next question was: how many boops are happening?
 
 ## First, count the boops
 
-I added PostHog so I could see what people were doing. Then ad blockers got in the way. If the browser blocked PostHog's script or requests, the events never made it there.
+I added PostHog so I could see what people were doing. Then ad blockers got in the way. If the browser blocked PostHog's script or requests, the events never made it there. And let me tell you: UBlock Origin does so with extreme prejudice.
 
-So I put a Cloudflare Worker in the middle. The browser sent the analytics traffic to my own endpoint, and the worker proxied it on to PostHog. That workaround became metrics-worker—which is a much more serious name than the project probably deserved.
+So I put a Cloudflare Worker in the middle. The browser sends the analytics traffic to my own endpoint, and the worker proxies it on to PostHog. That workaround became `metrics-worker` and is a much more serious component than this project probably deserved.
 
 ## One boop, one request? Not on the free tier
 
@@ -33,3 +33,5 @@ boop → browser batch → metrics-worker → PostHog + Supabase/Postgres → da
 None of this was the plan at the start. I wanted to make a placeholder photo do something silly, then answer one small question about it. Ad blockers led to a proxy. Free-tier limits led to batching. A dashboard led to a database and aggregate counters.
 
 And that's how a goofy boop app acquired an analytics pipeline: JavaScript in the browser, a Cloudflare Worker at the edge, PostHog for event analytics, and Supabase/Postgres for the live numbers. It is a whole lot of machinery for counting snoot boops—and a pretty good tour of what you can build by following the next question.
+
+Check out the [docs](https://github.com/jbirdkerr/jbirdkerr.github.io/tree/main/apps/metrics-worker/docs) for a more detailed look!

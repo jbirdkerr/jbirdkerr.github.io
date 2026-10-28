@@ -1,4 +1,4 @@
-// Package main generates an animated pixel-art dog sprite sheet for DigDog.
+// Package main generates an animated pixel-art Red Poodle sprite sheet for DigDog.
 // 128x160 pixels, 32x32 frames, 4 columns x 5 rows.
 package main
 
@@ -25,23 +25,29 @@ func main() {
 
 	img := image.NewNRGBA(image.Rect(0, 0, imgW, imgH))
 
-	// Colors for Henry the dog
-	fur := color.NRGBA{0xc8, 0x82, 0x3a, 0xff}       // warm golden tan
-	furDark := color.NRGBA{0x96, 0x56, 0x20, 0xff}   // dark brown ear & saddle
-	furLight := color.NRGBA{0xfa, 0xeb, 0xd7, 0xff}  // cream chest & paws
-	noseCol := color.NRGBA{0x2b, 0x1d, 0x14, 0xff}   // dark nose & eyes
-	tongueCol := color.NRGBA{0xf4, 0x72, 0xb6, 0xff} // pink tongue
-	white := color.NRGBA{0xff, 0xff, 0xff, 0xff}
+	// Rich Red Poodle Palette (Cinnamon / Copper / Auburn / Apricot)
+	redCoat := color.NRGBA{0xc4, 0x5a, 0x22, 0xff}   // Primary copper-red coat
+	redLight := color.NRGBA{0xe6, 0x82, 0x48, 0xff}  // Sunlit curls / highlights (apricot)
+	redDark := color.NRGBA{0x8f, 0x36, 0x12, 0xff}   // Shadow curls / creases (deep auburn)
+	redDeep := color.NRGBA{0x66, 0x22, 0x0a, 0xff}   // Darkest outline / ear shadow
+	noseCol := color.NRGBA{0x1c, 0x12, 0x0c, 0xff}   // Black truffle nose & dark eye
+	eyeShine := color.NRGBA{0xff, 0xff, 0xff, 0xff}  // White sparkle
+	tongueCol := color.NRGBA{0xf4, 0x72, 0xb6, 0xff} // Pink tongue
+
+	px := func(x, y int, c color.NRGBA) {
+		if x >= 0 && x < imgW && y >= 0 && y < imgH {
+			img.SetNRGBA(x, y, c)
+		}
+	}
 
 	fill := func(x, y, w, h int, c color.NRGBA) {
 		for dy := 0; dy < h; dy++ {
 			for dx := 0; dx < w; dx++ {
-				img.SetNRGBA(x+dx, y+dy, c)
+				px(x+dx, y+dy, c)
 			}
 		}
 	}
 
-	// Frame counts per row
 	frameCounts := []int{4, 4, 3, 3, 2}
 
 	for row := 0; row < rows; row++ {
@@ -50,91 +56,171 @@ func main() {
 			fx := col * frameW
 			fy := row * frameH
 
-			// Vertical bounce or offset for animations
 			yOff := 0
 			headYOff := 0
-			tailPos := 0 // 0=up, 1=mid, 2=down
-			pawsExtended := false
+			headXOff := 0
+			tailPhase := col % 4
+			pawPhase := col % 2
+			isHappy := (row == 3)
+			isSad := (row == 4)
+			isDig := (row == 1)
 
 			switch row {
-			case 0: // idle (tail wag)
-				tailPos = col % 3
+			case 0: // idle: breathing & tail wag
 				if col == 1 || col == 3 {
-					yOff = 0
+					yOff = -1
 				}
-			case 1: // dig (paws moving down, head low)
-				headYOff = 4
-				pawsExtended = (col%2 == 1)
-				tailPos = 1
-			case 2: // sniff (head down to ground)
-				headYOff = 5 + (col % 2)
-				tailPos = 1
-			case 3: // happy (bounce up)
+				tailPhase = col
+			case 1: // dig: crouch forward, paws alternate digging
+				headYOff = 3
+				headXOff = 2
+				tailPhase = 0
+			case 2: // sniff: head right down to ground
+				headYOff = 6
+				headXOff = 1
+				tailPhase = 1
+			case 3: // happy: playful bounce
 				if col == 1 {
 					yOff = -3
 				} else if col == 2 {
 					yOff = -1
 				}
-				tailPos = 0
-			case 4: // sad (head drooping, tail low)
-				headYOff = 3
-				tailPos = 2
+				tailPhase = (col * 2) % 4
+			case 4: // sad: drooping posture
+				headYOff = 2
+				tailPhase = 3
 			}
 
-			// --- Body ---
-			fill(fx+8, fy+13+yOff, 12, 9, fur)
-			fill(fx+10, fy+13+yOff, 7, 5, furDark)  // saddle patch
-			fill(fx+16, fy+16+yOff, 4, 6, furLight) // belly/chest highlight
-
-			// --- Legs & Paws ---
-			// Back leg
-			fill(fx+8, fy+22+yOff, 3, 5, fur)
-			fill(fx+7, fy+26+yOff, 4, 2, furLight)
-			// Front leg
-			frontLegY := fy + 22 + yOff
-			if pawsExtended {
-				frontLegY += 2
+			// --- Tail with Poodle Pom-Pom ---
+			// Tail stem curves upward from rump (x: 6, y: 15)
+			switch tailPhase {
+			case 0: // high & arched forward
+				fill(fx+6, fy+13+yOff, 2, 3, redDark)
+				fill(fx+5, fy+10+yOff, 2, 3, redCoat)
+				// Fluffy pom-pom on top
+				fill(fx+4, fy+7+yOff, 4, 4, redCoat)
+				fill(fx+5, fy+6+yOff, 3, 2, redLight)
+				fill(fx+4, fy+9+yOff, 4, 2, redDark)
+			case 1: // upright
+				fill(fx+5, fy+13+yOff, 2, 4, redDark)
+				fill(fx+5, fy+10+yOff, 2, 3, redCoat)
+				// Pom-pom
+				fill(fx+3, fy+8+yOff, 5, 4, redCoat)
+				fill(fx+4, fy+7+yOff, 3, 2, redLight)
+				fill(fx+4, fy+11+yOff, 4, 1, redDark)
+			case 2: // arched back
+				fill(fx+5, fy+14+yOff, 3, 3, redDark)
+				fill(fx+3, fy+12+yOff, 3, 2, redCoat)
+				// Pom-pom
+				fill(fx+2, fy+10+yOff, 4, 4, redCoat)
+				fill(fx+3, fy+9+yOff, 3, 2, redLight)
+				fill(fx+2, fy+13+yOff, 4, 1, redDark)
+			case 3: // lowered (sad / resting)
+				fill(fx+5, fy+15+yOff, 2, 3, redDark)
+				fill(fx+4, fy+17+yOff, 3, 3, redCoat)
+				fill(fx+3, fy+19+yOff, 3, 3, redDark)
 			}
-			fill(fx+17, frontLegY, 3, 5, fur)
-			fill(fx+16, frontLegY+4, 4, 2, furLight)
 
-			// --- Head & Muzzle ---
-			hy := fy + 7 + yOff + headYOff
-			fill(fx+17, hy, 8, 8, fur)
-			fill(fx+23, hy+3, 5, 4, furLight) // snout
-			fill(fx+26, hy+3, 2, 2, noseCol)  // nose tip
+			// --- Curly Poodle Body ---
+			by := fy + 13 + yOff
+			// Main body core
+			fill(fx+8, by+1, 11, 8, redCoat)
+			fill(fx+7, by+2, 1, 6, redDark) // rump curve
+			// Curl clusters (texture bumps on coat)
+			px(fx+8, by, redLight)
+			px(fx+10, by, redLight)
+			px(fx+13, by, redLight)
+			px(fx+15, by, redLight)
+			fill(fx+9, by+1, 2, 1, redLight)
+			fill(fx+12, by+1, 2, 1, redLight)
+			fill(fx+10, by+4, 3, 2, redDark) // deep curl shadow
+			fill(fx+14, by+5, 2, 2, redDark)
 
-			// Eye
-			if row == 3 {
+			// Poodle Chest / Front Ruff (voluminous curly puff)
+			fill(fx+15, by+1, 5, 8, redCoat)
+			fill(fx+17, by, 3, 2, redLight)
+			fill(fx+18, by+2, 3, 4, redLight)
+			fill(fx+15, by+7, 4, 2, redDark)
+
+			// --- Back Leg & Fluffy Boot ---
+			// Hip
+			fill(fx+8, fy+18+yOff, 4, 4, redCoat)
+			fill(fx+7, fy+19+yOff, 2, 3, redDark)
+			// Slender hock
+			fill(fx+9, fy+22+yOff, 2, 4, redCoat)
+			// Poodle curly foot puff (pom-pom boot)
+			fill(fx+7, fy+25+yOff, 5, 4, redCoat)
+			fill(fx+8, fy+25+yOff, 3, 1, redLight)
+			fill(fx+7, fy+28+yOff, 5, 1, redDark)
+
+			// --- Front Leg & Fluffy Boot ---
+			fLegY := fy + 21 + yOff
+			if isDig {
+				if pawPhase == 0 {
+					fLegY += 2
+				} else {
+					fLegY -= 1
+				}
+			}
+			// Slender leg
+			fill(fx+17, fLegY, 2, 4, redCoat)
+			// Poodle curly front boot
+			fill(fx+16, fLegY+3, 5, 4, redCoat)
+			fill(fx+17, fLegY+3, 3, 1, redLight)
+			fill(fx+16, fLegY+6, 5, 1, redDeep)
+
+			// Digging dirt specks flying from paws
+			if isDig && pawPhase == 0 {
+				px(fx+22, fy+27, color.NRGBA{0x7a, 0x48, 0x22, 0xff})
+				px(fx+24, fy+25, color.NRGBA{0x5a, 0x33, 0x18, 0xff})
+			}
+
+			// --- Head, Topknot, Ears & Muzzle ---
+			hx := fx + 17 + headXOff
+			hy := fy + 6 + yOff + headYOff
+
+			// Poodle Topknot (the signature curly puff on top of the head)
+			fill(hx+2, hy-2, 6, 4, redCoat)
+			fill(hx+3, hy-3, 4, 2, redLight) // topknot crest highlight
+			px(hx+1, hy-1, redCoat)
+			px(hx+8, hy-1, redCoat)
+			fill(hx+3, hy+1, 4, 1, redDark) // crease under topknot
+
+			// Head core
+			fill(hx+1, hy+1, 8, 7, redCoat)
+
+			// Long Fluffy Poodle Ear (hangs down beside cheek, wide curly bell at bottom)
+			earY := hy + 1
+			if isSad {
+				earY += 2 // droop
+			}
+			fill(hx-1, earY, 3, 4, redDark)
+			fill(hx-2, earY+3, 4, 5, redDark) // fluffy lower ear bell
+			fill(hx-1, earY+4, 2, 3, redDeep) // inner ear shadow
+			fill(hx-2, earY+7, 4, 1, redDeep)
+
+			// Slender Poodle Muzzle (fine tapered snout)
+			fill(hx+7, hy+3, 5, 4, redCoat)
+			fill(hx+8, hy+3, 4, 2, redLight) // bridge of snout
+			// Dark nose leather at tip
+			fill(hx+11, hy+3, 2, 2, noseCol)
+
+			// Expressive Eye
+			if isHappy {
 				// Happy squint eye ^^
-				fill(fx+21, hy+2, 2, 1, noseCol)
-				fill(fx+23, hy+5, 2, 2, tongueCol) // tongue out!
-			} else if row == 4 {
-				// Sad droopy eye
-				fill(fx+21, hy+3, 2, 1, noseCol)
+				fill(hx+5, hy+2, 2, 1, noseCol)
+				px(hx+4, hy+3, noseCol)
+				px(hx+7, hy+3, noseCol)
+				// Cute little tongue
+				fill(hx+9, hy+6, 2, 2, tongueCol)
+			} else if isSad {
+				// Drooping eye
+				fill(hx+5, hy+3, 2, 1, noseCol)
+				px(hx+4, hy+2, noseCol)
 			} else {
-				// Normal eye
-				fill(fx+21, hy+2, 2, 2, noseCol)
-				fill(fx+22, hy+2, 1, 1, white) // sparkle
-			}
-
-			// Ear (floppy)
-			earY := hy - 1
-			if row == 4 {
-				earY += 3 // drooping
-			}
-			fill(fx+15, earY, 3, 6, furDark)
-
-			// --- Tail ---
-			switch tailPos {
-			case 0: // up
-				fill(fx+5, fy+8+yOff, 4, 2, fur)
-				fill(fx+7, fy+10+yOff, 2, 4, fur)
-			case 1: // mid
-				fill(fx+4, fy+12+yOff, 5, 2, fur)
-			case 2: // down
-				fill(fx+5, fy+15+yOff, 2, 4, fur)
-				fill(fx+4, fy+18+yOff, 2, 3, fur)
+				// Dark round eye with white shine
+				fill(hx+5, hy+2, 2, 2, noseCol)
+				px(hx+6, hy+2, eyeShine)
 			}
 		}
 	}

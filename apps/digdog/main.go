@@ -375,10 +375,12 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	ebitenutil.DebugPrintAt(screen, sniffLabel, screenW-155, 2)
 
 	muteLabel := "[M] AUDIO"
-	if g.audio.IsMuted() {
+	if !g.audio.IsAvailable() {
+		muteLabel = "[M] NO SOUND"
+	} else if g.audio.IsMuted() {
 		muteLabel = "[M] MUTED"
 	}
-	ebitenutil.DebugPrintAt(screen, muteLabel, screenW-64, 2)
+	ebitenutil.DebugPrintAt(screen, muteLabel, screenW-76, 2)
 }
 
 func (g *Game) Layout(outsideW, outsideH int) (int, int) {

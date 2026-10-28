@@ -15,6 +15,7 @@ const (
 type AudioSystem struct {
 	ctx         *audio.Context
 	initialized bool
+	available   bool
 	muted       bool
 
 	sndDig    []byte
@@ -26,7 +27,8 @@ type AudioSystem struct {
 
 func newAudioSystem() *AudioSystem {
 	a := &AudioSystem{
-		muted: false,
+		available: isAudioSupported(),
+		muted:     false,
 	}
 	// Pre-synthesize the sound waveforms into PCM bytes
 	a.sndDig = a.synthDig()
@@ -42,16 +44,27 @@ func (a *AudioSystem) ensureInit() {
 	if a.initialized {
 		return
 	}
-	a.ctx = audio.NewContext(soundSampleRate)
 	a.initialized = true
+	if !a.available {
+		a.muted = true
+		return
+	}
+	a.ctx = audio.NewContext(soundSampleRate)
 }
 
 func (a *AudioSystem) ToggleMute() {
+	if !a.available {
+		return
+	}
 	a.muted = !a.muted
 }
 
 func (a *AudioSystem) IsMuted() bool {
 	return a.muted
+}
+
+func (a *AudioSystem) IsAvailable() bool {
+	return a.available
 }
 
 func (a *AudioSystem) play(pcm []byte) {

@@ -47,7 +47,7 @@ jobs:
         run: |
           GOOS=js GOARCH=wasm go vet ./...
           GOOS=js GOARCH=wasm go build -o web/digdog.wasm .
-          
+
           # Copy matching wasm_exec.js from Go root
           GOROOT="$(go env GOROOT)"
           if [ -f "$GOROOT/lib/wasm/wasm_exec.js" ]; then

@@ -3,7 +3,7 @@ title: "DigDog: Shipping a WebAssembly Game the Cheap and Simple Way"
 description: Henry wanted to star in another project. So I built him a card-matching game in Go, compiled it to WebAssembly, and spent more time on the dog sprite than I planned to admit.
 pubDate: 2026-10-28
 tags: [go, webassembly, games, henry]
-draft: true
+draft: false
 ---
 
 Henry already has a subdomain. It is a canvas thing where you can boop his snoot and make him sneeze. I built it because I had a good photo, WebAudio turned out to be fun to synthesize sounds with, and it felt right that a personal site should have something interactive on it.

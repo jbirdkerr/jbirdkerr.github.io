@@ -307,15 +307,30 @@ func (g *Game) Update() error {
 	return nil
 }
 
+// targetPos returns the destination position and facing for the dog when digging mound i.
+// The dog approaches from either the left or right side so the card remains completely visible.
+func (g *Game) targetPos(i int) (float64, float64, float64) {
+	cx, cy := cellCenter(g.board, i)
+	sideOffset := 24.0
+	facing := 1.0
+	tx := cx - sideOffset
+	if g.dogX > cx {
+		tx = cx + sideOffset
+		facing = -1.0
+	}
+	ty := cy + 8.0 // stand just beside the mound
+	return tx, ty, facing
+}
+
 // walk moves the dog toward the target mound and starts digging on arrival.
 func (g *Game) walk() {
-	cx, cy := cellCenter(g.board, g.target)
-	tx, ty := cx, cy+16 // stand just below the mound so the card stays visible
+	tx, ty, targetFacing := g.targetPos(g.target)
 	dx, dy := tx-g.dogX, ty-g.dogY
 	dist := math.Hypot(dx, dy)
 
 	if dist <= dogSpeed {
 		g.dogX, g.dogY = tx, ty
+		g.facing = targetFacing
 		g.walking = false
 		g.digging = true
 		g.play("dig")

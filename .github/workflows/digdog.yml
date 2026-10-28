@@ -1,0 +1,74 @@
+name: DigDog CI / CD
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "apps/digdog/**"
+      - ".github/workflows/digdog.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "apps/digdog/**"
+      - ".github/workflows/digdog.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: digdog-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-test:
+    name: Build, Test & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "apps/digdog/go.mod"
+          cache-dependency-path: "apps/digdog/go.sum"
+
+      - name: Run Go vet (native)
+        working-directory: apps/digdog
+        run: go vet ./internal/board/...
+
+      - name: Run Go tests
+        working-directory: apps/digdog
+        run: go test -v ./internal/board/...
+
+      - name: Build WebAssembly
+        working-directory: apps/digdog
+        run: |
+          GOOS=js GOARCH=wasm go vet ./...
+          GOOS=js GOARCH=wasm go build -o web/digdog.wasm .
+          
+          # Copy matching wasm_exec.js from Go root
+          GOROOT="$(go env GOROOT)"
+          if [ -f "$GOROOT/lib/wasm/wasm_exec.js" ]; then
+            cp "$GOROOT/lib/wasm/wasm_exec.js" web/
+          elif [ -f "$GOROOT/misc/wasm/wasm_exec.js" ]; then
+            cp "$GOROOT/misc/wasm/wasm_exec.js" web/
+          else
+            echo "Error: wasm_exec.js not found in $GOROOT"
+            exit 1
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        working-directory: apps/digdog
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "Deploying DigDog to Cloudflare Pages..."
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            npx wrangler pages deploy web --project-name digdog --branch main
+          else
+            echo "CLOUDFLARE_API_TOKEN not set; skipping live Cloudflare Pages deploy."
+          fi

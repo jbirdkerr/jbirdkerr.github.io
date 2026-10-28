@@ -20,6 +20,15 @@ deploy = "apps/boopmaster:deploy"
 depends_on = []
 environments = ["preview", "production"]
 
+[units.digdog]
+name = "digdog"
+paths = ["apps/digdog/**"]
+host = "cloudflare-pages"
+build = "apps/digdog:dist"
+deploy = "apps/digdog:deploy"
+depends_on = []
+environments = ["preview", "production"]
+
 [units.db]
 name = "db"
 paths = ["db/supabase/migrations/**"]

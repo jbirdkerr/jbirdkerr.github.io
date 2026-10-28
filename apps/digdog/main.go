@@ -9,6 +9,7 @@ import (
 	_ "image/png"
 	"log"
 	"math"
+	"math/rand"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -82,6 +83,11 @@ type Game struct {
 
 	audio *AudioSystem
 
+	sniffing    bool
+	sniffTimer  int
+	sniffTarget int
+	sniffsLeft  int
+
 	particles Particles
 }
 
@@ -114,7 +120,30 @@ func (g *Game) reset() {
 	g.walking, g.digging = false, false
 	g.particles = g.particles[:0]
 	g.focusIndex = 0
+	g.sniffing = false
+	g.sniffTimer = 0
+	g.sniffTarget = -1
+	g.sniffsLeft = 2
 	g.play("idle")
+}
+
+func (g *Game) triggerSniff() {
+	if g.walking || g.digging || g.sniffing || g.sniffsLeft <= 0 || g.board.Won {
+		return
+	}
+	var buried []int
+	for i := 0; i < g.board.Len(); i++ {
+		if g.board.Card(i).State == board.Buried {
+			buried = append(buried, i)
+		}
+	}
+	if len(buried) == 0 {
+		return
+	}
+	g.sniffsLeft--
+	g.sniffing = true
+	g.sniffTarget = buried[rand.Intn(len(buried))]
+	g.play("sniff")
 }
 
 func (g *Game) play(name string) {
@@ -177,9 +206,13 @@ func (g *Game) handleInput() {
 		inpututil.IsKeyJustPressed(ebiten.KeyEnter) ||
 		inpututil.IsKeyJustPressed(ebiten.KeyNumpadEnter)
 
+	if inpututil.IsKeyJustPressed(ebiten.KeyS) {
+		g.triggerSniff()
+	}
+
 	if keyboardDig {
 		g.showFocus = true
-		if !g.walking && !g.digging {
+		if !g.walking && !g.digging && !g.sniffing {
 			if g.board.Pick(g.focusIndex) {
 				g.target = g.focusIndex
 				g.walking = true
@@ -194,9 +227,14 @@ func (g *Game) handleInput() {
 			g.audio.ToggleMute()
 			return
 		}
+		// Click on sniff power-up button
+		if x >= screenW-160 && x < screenW-64 && y <= 16 {
+			g.triggerSniff()
+			return
+		}
 		if i := cellAt(g.board, x, y); i >= 0 {
 			g.focusIndex = i
-			if !g.walking && !g.digging {
+			if !g.walking && !g.digging && !g.sniffing {
 				if g.board.Pick(i) {
 					g.target = i
 					g.walking = true
@@ -230,6 +268,13 @@ func (g *Game) Update() error {
 	g.board.Update()
 	g.particles.Update()
 
+	if g.sniffTimer > 0 {
+		g.sniffTimer--
+		if g.sniffTimer == 0 {
+			g.sniffTarget = -1
+		}
+	}
+
 	// Spawn dirt particles while the dog is digging (unless reduced motion is active).
 	if g.digging && !g.reducedMotion {
 		px, py := cellCenter(g.board, g.target)
@@ -250,6 +295,11 @@ func (g *Game) Update() error {
 		if g.digging {
 			g.digging = false
 			g.afterReveal(g.board.Reveal(g.target))
+		} else if g.sniffing {
+			g.sniffing = false
+			g.sniffTimer = 45
+			g.audio.PlayReveal()
+			g.play("idle")
 		} else {
 			g.play("idle")
 		}
@@ -300,7 +350,7 @@ func (g *Game) afterReveal(r board.Result) {
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	screen.Fill(color.RGBA{R: 0x1a, G: 0x12, B: 0x0c, A: 0xff})
-	drawBoard(screen, g.board, g.focusIndex, g.showFocus)
+	drawBoard(screen, g.board, g.focusIndex, g.showFocus, g.sniffTarget, g.sniffTimer > 0)
 	g.particles.Draw(screen)
 
 	op := &ebiten.DrawImageOptions{}
@@ -313,16 +363,22 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	screen.DrawImage(g.anims[g.current].Frame(), op)
 
 	msg := fmt.Sprintf("moves: %d", g.board.Moves)
+	if g.board.Streak > 1 {
+		msg += fmt.Sprintf("  streak: x%d", g.board.Streak)
+	}
 	if g.board.Won {
-		msg = fmt.Sprintf("all matched in %d moves! press Space or click to play again", g.board.Moves)
+		msg = fmt.Sprintf("all matched in %d moves! (best streak: %d) press Space/click", g.board.Moves, g.board.MaxStreak)
 	}
 	ebitenutil.DebugPrintAt(screen, msg, 4, 2)
+
+	sniffLabel := fmt.Sprintf("[S] SNIFF (%d)", g.sniffsLeft)
+	ebitenutil.DebugPrintAt(screen, sniffLabel, screenW-155, 2)
 
 	muteLabel := "[M] AUDIO"
 	if g.audio.IsMuted() {
 		muteLabel = "[M] MUTED"
 	}
-	ebitenutil.DebugPrintAt(screen, muteLabel, screenW-62, 2)
+	ebitenutil.DebugPrintAt(screen, muteLabel, screenW-64, 2)
 }
 
 func (g *Game) Layout(outsideW, outsideH int) (int, int) {

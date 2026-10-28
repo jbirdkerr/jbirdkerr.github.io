@@ -138,3 +138,50 @@ func TestWin(t *testing.T) {
 		t.Error("Board.Won should be true after the last match")
 	}
 }
+
+// TestStreak verifies that consecutive matches increase Streak, and a miss resets it to 0.
+func TestStreak(t *testing.T) {
+	b := newTestBoard()
+
+	// First match
+	b.Pick(0)
+	b.Reveal(0)
+	b.Pick(2)
+	b.Reveal(2)
+	if b.Streak != 1 {
+		t.Errorf("got Streak %d, want 1", b.Streak)
+	}
+
+	// Another board to test miss reset
+	b2 := newTestBoard()
+	b2.Pick(0)
+	b2.Reveal(0)
+	b2.Pick(2)
+	b2.Reveal(2)
+	if b2.Streak != 1 {
+		t.Errorf("got Streak %d, want 1", b2.Streak)
+	}
+	// Now a miss
+	b2.Pick(1)
+	b2.Reveal(1)
+	b2.Pick(3) // wait, 1 and 3 match; let's pick 1 and 0 (0 is already matched though)
+	// Create board with 6 cards to test match then miss
+	b6 := NewBoardFromFaces(3, 2, []int{0, 1, 2, 0, 1, 2})
+	b6.Pick(0)
+	b6.Reveal(0)
+	b6.Pick(3)
+	b6.Reveal(3) // match!
+	if b6.Streak != 1 {
+		t.Errorf("got Streak %d, want 1", b6.Streak)
+	}
+	b6.Pick(1)
+	b6.Reveal(1)
+	b6.Pick(5)
+	b6.Reveal(5) // mismatch (face 1 vs face 2)
+	if b6.Streak != 0 {
+		t.Errorf("got Streak %d after miss, want 0", b6.Streak)
+	}
+	if b6.MaxStreak != 1 {
+		t.Errorf("got MaxStreak %d, want 1", b6.MaxStreak)
+	}
+}

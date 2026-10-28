@@ -42,8 +42,10 @@ type Board struct {
 	missTimer    int
 	locked       bool // true while the dog is busy or a miss is showing
 
-	Moves int
-	Won   bool
+	Moves     int
+	Streak    int
+	MaxStreak int
+	Won       bool
 }
 
 // NewBoardFromFaces constructs a Board from an already-decided face sequence.
@@ -110,6 +112,10 @@ func (b *Board) Reveal(i int) Result {
 
 	if b.cards[a].Face == b.cards[i].Face {
 		b.cards[a].State, b.cards[i].State = Matched, Matched
+		b.Streak++
+		if b.Streak > b.MaxStreak {
+			b.MaxStreak = b.Streak
+		}
 		if b.allMatched() {
 			b.Won = true // stays locked
 			return ResultWin
@@ -118,6 +124,7 @@ func (b *Board) Reveal(i int) Result {
 		return ResultMatch
 	}
 
+	b.Streak = 0
 	b.missA, b.missB, b.missTimer = a, i, missTicks // stays locked until Update re-buries them
 	return ResultMiss
 }

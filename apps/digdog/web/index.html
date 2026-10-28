@@ -2,23 +2,76 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>DigDog</title>
-  <meta name="description" content="DigDog: a pixel-art card-matching game where a dog digs up the cards." />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>DigDog — Pixel-Art Card-Matching Game</title>
+  <meta name="description" content="DigDog: a retro pixel-art card-matching game where a dog digs up the cards. Built with Go, Ebitengine, and WebAssembly." />
   <style>
-    html, body { margin: 0; height: 100%; background: #0a0e27; color: #d1d5db; font-family: ui-monospace, monospace; }
-    canvas { display: block; }
-    noscript { display: block; padding: 2rem; text-align: center; }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #0a0e27;
+      color: #94a3b8;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    canvas {
+      display: block;
+      image-rendering: -moz-crisp-edges;
+      image-rendering: -webkit-crisp-edges;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      outline: none;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+    }
+    #instructions {
+      position: absolute;
+      bottom: 8px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 11px;
+      color: #64748b;
+      pointer-events: none;
+    }
+    #instructions kbd {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 3px;
+      padding: 1px 4px;
+      color: #cbd5e1;
+      font-size: 10px;
+    }
+    noscript {
+      display: block;
+      padding: 2rem;
+      text-align: center;
+      color: #f87171;
+    }
   </style>
 </head>
 <body>
-  <noscript>DigDog needs JavaScript and WebAssembly. Click or tap a mound to dig up a card and match the pairs.</noscript>
+  <noscript>DigDog requires WebAssembly and JavaScript enabled. Click or tap mounds to dig up cards and match pairs.</noscript>
+  <div id="instructions">
+    <kbd>Arrows</kbd> / <kbd>WASD</kbd> Move focus &nbsp;•&nbsp; <kbd>Space</kbd> / <kbd>Enter</kbd> / <kbd>Click</kbd> Dig &nbsp;•&nbsp; <kbd>R</kbd> Restart &nbsp;•&nbsp; <kbd>P</kbd> Motion
+  </div>
   <script src="wasm_exec.js"></script>
   <script>
     const go = new Go();
     WebAssembly.instantiateStreaming(fetch("digdog.wasm"), go.importObject)
       .then((result) => go.run(result.instance))
-      .catch((err) => { document.body.textContent = "Could not load the game: " + err; });
+      .catch((err) => {
+        document.body.innerHTML = "<p style='color:#ef4444;text-align:center;'>Could not load DigDog: " + err + "</p>";
+      });
   </script>
 </body>
 </html>

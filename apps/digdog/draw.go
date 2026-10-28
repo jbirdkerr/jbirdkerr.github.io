@@ -57,7 +57,27 @@ func fillRect(dst *ebiten.Image, x, y, w, h int, c color.Color) {
 	dst.SubImage(image.Rect(x, y, x+w, y+h)).(*ebiten.Image).Fill(c)
 }
 
-func drawBoard(screen *ebiten.Image, b *board.Board) {
+func drawFocusRing(screen *ebiten.Image, x, y, w, h int) {
+	// Crisp cyan corner brackets around the selected mound
+	bracketCol := color.RGBA{0x38, 0xbd, 0xf8, 0xff}
+	bLen := 6
+	bThick := 2
+
+	// Top-left
+	fillRect(screen, x, y, bLen, bThick, bracketCol)
+	fillRect(screen, x, y, bThick, bLen, bracketCol)
+	// Top-right
+	fillRect(screen, x+w-bLen, y, bLen, bThick, bracketCol)
+	fillRect(screen, x+w-bThick, y, bThick, bLen, bracketCol)
+	// Bottom-left
+	fillRect(screen, x, y+h-bThick, bLen, bThick, bracketCol)
+	fillRect(screen, x, y+h-bLen, bThick, bLen, bracketCol)
+	// Bottom-right
+	fillRect(screen, x+w-bLen, y+h-bThick, bLen, bThick, bracketCol)
+	fillRect(screen, x+w-bThick, y+h-bLen, bThick, bLen, bracketCol)
+}
+
+func drawBoard(screen *ebiten.Image, b *board.Board, focusIndex int, showFocus bool) {
 	ox, oy := boardOrigin(b)
 	for i := 0; i < b.Len(); i++ {
 		c := b.Card(i)
@@ -79,6 +99,10 @@ func drawBoard(screen *ebiten.Image, b *board.Board) {
 			}
 		case board.Matched:
 			fillRect(screen, x+6, y+6, cardW-12, cardH-12, color.RGBA{0x12, 0x0c, 0x08, 0xff})
+		}
+
+		if showFocus && i == focusIndex {
+			drawFocusRing(screen, x-2, y-2, cardW+4, cardH+4)
 		}
 	}
 }

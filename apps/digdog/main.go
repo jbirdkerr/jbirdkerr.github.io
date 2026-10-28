@@ -74,6 +74,12 @@ type Game struct {
 	walking    bool
 	digging    bool
 
+	focusIndex int  // card index selected via keyboard
+	showFocus  bool // whether the focus indicator is currently displayed
+	ticks      int  // tick counter for animation/pulsing effects
+
+	reducedMotion bool
+
 	particles Particles
 }
 
@@ -92,6 +98,7 @@ func newGame() (*Game, error) {
 			"happy": {frames: sliceRow(sheet, 3, 3), ticksPerFrame: 8},
 			"sad":   {frames: sliceRow(sheet, 4, 2), ticksPerFrame: 12},
 		},
+		reducedMotion: isReducedMotionPreferred(),
 	}
 	g.reset()
 	return g, nil
@@ -103,6 +110,7 @@ func (g *Game) reset() {
 	g.facing = 1
 	g.walking, g.digging = false, false
 	g.particles = g.particles[:0]
+	g.focusIndex = 0
 	g.play("idle")
 }
 
@@ -124,12 +132,86 @@ func pointerPos() (int, int, bool) {
 	return 0, 0, false
 }
 
+func (g *Game) handleInput() {
+	cols := g.board.Cols()
+	rows := g.board.Rows()
+	col := g.focusIndex % cols
+	row := g.focusIndex / cols
+
+	navigated := false
+	if inpututil.IsKeyJustPressed(ebiten.KeyArrowLeft) || inpututil.IsKeyJustPressed(ebiten.KeyLeft) || inpututil.IsKeyJustPressed(ebiten.KeyA) {
+		if col > 0 {
+			col--
+			navigated = true
+		}
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyArrowRight) || inpututil.IsKeyJustPressed(ebiten.KeyRight) || inpututil.IsKeyJustPressed(ebiten.KeyD) {
+		if col < cols-1 {
+			col++
+			navigated = true
+		}
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyArrowUp) || inpututil.IsKeyJustPressed(ebiten.KeyUp) || inpututil.IsKeyJustPressed(ebiten.KeyW) {
+		if row > 0 {
+			row--
+			navigated = true
+		}
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyArrowDown) || inpututil.IsKeyJustPressed(ebiten.KeyDown) || inpututil.IsKeyJustPressed(ebiten.KeyS) {
+		if row < rows-1 {
+			row++
+			navigated = true
+		}
+	}
+
+	if navigated {
+		g.focusIndex = row*cols + col
+		g.showFocus = true
+	}
+
+	// Space or Enter acts on the focused card
+	keyboardDig := inpututil.IsKeyJustPressed(ebiten.KeySpace) ||
+		inpututil.IsKeyJustPressed(ebiten.KeyEnter) ||
+		inpututil.IsKeyJustPressed(ebiten.KeyNumpadEnter)
+
+	if keyboardDig {
+		g.showFocus = true
+		if !g.walking && !g.digging {
+			if g.board.Pick(g.focusIndex) {
+				g.target = g.focusIndex
+				g.walking = true
+			}
+		}
+	}
+
+	// Mouse or touch input
+	if x, y, ok := pointerPos(); ok {
+		if i := cellAt(g.board, x, y); i >= 0 {
+			g.focusIndex = i
+			if !g.walking && !g.digging {
+				if g.board.Pick(i) {
+					g.target = i
+					g.walking = true
+				}
+			}
+		}
+	}
+}
+
 func (g *Game) Update() error {
+	g.ticks++
 	if inpututil.IsKeyJustPressed(ebiten.KeyR) {
 		g.reset()
 	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyP) {
+		g.reducedMotion = !g.reducedMotion
+	}
 	if g.board.Won {
 		if _, _, ok := pointerPos(); ok {
+			g.reset()
+			return nil
+		}
+		if inpututil.IsKeyJustPressed(ebiten.KeySpace) || inpututil.IsKeyJustPressed(ebiten.KeyEnter) || inpututil.IsKeyJustPressed(ebiten.KeyNumpadEnter) {
 			g.reset()
 			return nil
 		}
@@ -137,23 +219,15 @@ func (g *Game) Update() error {
 	g.board.Update()
 	g.particles.Update()
 
-	// Spawn dirt particles while the dog is digging.
-	if g.digging {
+	// Spawn dirt particles while the dog is digging (unless reduced motion is active).
+	if g.digging && !g.reducedMotion {
 		px, py := cellCenter(g.board, g.target)
 		py += 6 // just below the mound
 		g.particles.Spawn(px, py)
 		g.particles.Spawn(px, py)
 	}
 
-	// Only accept a new pick while the dog is free.
-	if !g.walking && !g.digging {
-		if x, y, ok := pointerPos(); ok {
-			if i := cellAt(g.board, x, y); g.board.Pick(i) {
-				g.target = i
-				g.walking = true
-			}
-		}
-	}
+	g.handleInput()
 
 	if g.walking {
 		g.walk()
@@ -206,7 +280,7 @@ func (g *Game) afterReveal(r board.Result) {
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	screen.Fill(color.RGBA{R: 0x1a, G: 0x12, B: 0x0c, A: 0xff})
-	drawBoard(screen, g.board)
+	drawBoard(screen, g.board, g.focusIndex, g.showFocus)
 	g.particles.Draw(screen)
 
 	op := &ebiten.DrawImageOptions{}
@@ -220,7 +294,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	msg := fmt.Sprintf("moves: %d", g.board.Moves)
 	if g.board.Won {
-		msg = fmt.Sprintf("all matched in %d moves! tap or click to play again", g.board.Moves)
+		msg = fmt.Sprintf("all matched in %d moves! press Space or click to play again", g.board.Moves)
 	}
 	ebitenutil.DebugPrintAt(screen, msg, 4, 2)
 }

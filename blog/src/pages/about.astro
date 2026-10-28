@@ -3,13 +3,32 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import Prompt from '../components/Prompt.astro';
 ---
 
-<BaseLayout title="About" description="About this site.">
+<BaseLayout title="About" description="About Justin Kerr and this site.">
   <Prompt cmd="cat about.md" />
   <div class="post-body prose max-w-none">
-    <p>Replace this with a short introduction: who you are, what you work on, and how to reach you.</p>
+    <img src="/favicon.svg" alt="" class="about-icon" />
     <p>
-      This site is a static Astro blog. Experiments live on separate subdomains and share one small
-      analytics worker.
+      I'm Justin Kerr, a site reliability and platform engineer in the Austin, Texas area. I've spent about
+      fifteen years keeping production systems running, mostly on AWS, with Terraform, Kubernetes,
+      and a lot of Python and Go tools to make the boring parts less painful.
     </p>
+
+    <p>
+      This site is a static Astro blog and portfolio, written in Markdown and hosted on GitHub Pages
+      for as close to free as I can manage. It's where I write up what I build, what worked, what
+      didn't, and what each choice cost in money and maintenance time.
+    </p>
+
+    <p>
+      Most of my "experiments" live on their own subdomains. Each one is a small, playful project, from interactive
+      canvases to a WebAssembly game, and each one can choose its own stack and hosting. 
+    </p>
+
+    <p>
+      The source is on <a href="https://github.com/jbirdkerr/jbirdkerr.github.io">GitHub</a> under
+      AGPL-3.0. If something here is useful to you, take it and adapt it. You can also find me on
+      <a href="https://www.linkedin.com/in/justincraigkerr/">LinkedIn</a>.
+    </p>
+
   </div>
 </BaseLayout>

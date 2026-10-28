@@ -381,9 +381,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	if g.board.Streak > 1 {
 		msg += fmt.Sprintf("  streak: x%d", g.board.Streak)
 	}
-	if g.board.Won {
-		msg = fmt.Sprintf("all matched in %d moves! (best streak: %d) press Space/click", g.board.Moves, g.board.MaxStreak)
-	}
 	ebitenutil.DebugPrintAt(screen, msg, 4, 2)
 
 	sniffLabel := fmt.Sprintf("[S] SNIFF (%d)", g.sniffsLeft)
@@ -396,6 +393,42 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		muteLabel = "[M] MUTED"
 	}
 	ebitenutil.DebugPrintAt(screen, muteLabel, screenW-76, 2)
+
+	// Victory banner centered cleanly on screen when round is won
+	if g.board.Won {
+		bannerW, bannerH := 264, 40
+		bx := (screenW - bannerW) / 2
+		by := (screenH-bannerH)/2 - 4
+
+		// Drop shadow & dark slate background
+		fillRect(screen, bx+2, by+2, bannerW, bannerH, color.RGBA{0x00, 0x00, 0x00, 0xcc})
+		fillRect(screen, bx, by, bannerW, bannerH, color.RGBA{0x0a, 0x0e, 0x27, 0xf6})
+
+		// Gold border with corner highlights
+		gold := color.RGBA{0xfd, 0xe0, 0x47, 0xff}
+		fillRect(screen, bx, by, bannerW, 1, gold)
+		fillRect(screen, bx, by+bannerH-1, bannerW, 1, gold)
+		fillRect(screen, bx, by, 1, bannerH, gold)
+		fillRect(screen, bx+bannerW-1, by, 1, bannerH, gold)
+
+		line1 := fmt.Sprintf("ALL MATCHED IN %d MOVES!", g.board.Moves)
+		if g.board.MaxStreak > 1 {
+			line1 += fmt.Sprintf(" (Streak x%d)", g.board.MaxStreak)
+		}
+		line2 := "Click, tap, or press Space to play again"
+
+		tx1 := bx + (bannerW-len(line1)*6)/2
+		if tx1 < bx+6 {
+			tx1 = bx + 6
+		}
+		tx2 := bx + (bannerW-len(line2)*6)/2
+		if tx2 < bx+6 {
+			tx2 = bx + 6
+		}
+
+		ebitenutil.DebugPrintAt(screen, line1, tx1, by+7)
+		ebitenutil.DebugPrintAt(screen, line2, tx2, by+21)
+	}
 }
 
 func (g *Game) Layout(outsideW, outsideH int) (int, int) {

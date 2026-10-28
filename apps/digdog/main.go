@@ -80,6 +80,8 @@ type Game struct {
 
 	reducedMotion bool
 
+	audio *AudioSystem
+
 	particles Particles
 }
 
@@ -99,6 +101,7 @@ func newGame() (*Game, error) {
 			"sad":   {frames: sliceRow(sheet, 4, 2), ticksPerFrame: 12},
 		},
 		reducedMotion: isReducedMotionPreferred(),
+		audio:         newAudioSystem(),
 	}
 	g.reset()
 	return g, nil
@@ -186,6 +189,11 @@ func (g *Game) handleInput() {
 
 	// Mouse or touch input
 	if x, y, ok := pointerPos(); ok {
+		// Click on top-right mute toggle
+		if x >= screenW-64 && y <= 16 {
+			g.audio.ToggleMute()
+			return
+		}
 		if i := cellAt(g.board, x, y); i >= 0 {
 			g.focusIndex = i
 			if !g.walking && !g.digging {
@@ -202,6 +210,9 @@ func (g *Game) Update() error {
 	g.ticks++
 	if inpututil.IsKeyJustPressed(ebiten.KeyR) {
 		g.reset()
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyM) {
+		g.audio.ToggleMute()
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyP) {
 		g.reducedMotion = !g.reducedMotion
@@ -258,6 +269,7 @@ func (g *Game) walk() {
 		g.walking = false
 		g.digging = true
 		g.play("dig")
+		g.audio.PlayDig()
 		return
 	}
 	g.dogX += dx / dist * dogSpeed
@@ -269,9 +281,17 @@ func (g *Game) walk() {
 
 func (g *Game) afterReveal(r board.Result) {
 	switch r {
-	case board.ResultMatch, board.ResultWin:
+	case board.ResultFirst:
+		g.audio.PlayReveal()
+		g.play("idle")
+	case board.ResultMatch:
+		g.audio.PlayMatch()
+		g.play("happy")
+	case board.ResultWin:
+		g.audio.PlayWin()
 		g.play("happy")
 	case board.ResultMiss:
+		g.audio.PlayMiss()
 		g.play("sad")
 	default:
 		g.play("idle")
@@ -297,6 +317,12 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		msg = fmt.Sprintf("all matched in %d moves! press Space or click to play again", g.board.Moves)
 	}
 	ebitenutil.DebugPrintAt(screen, msg, 4, 2)
+
+	muteLabel := "[M] AUDIO"
+	if g.audio.IsMuted() {
+		muteLabel = "[M] MUTED"
+	}
+	ebitenutil.DebugPrintAt(screen, muteLabel, screenW-62, 2)
 }
 
 func (g *Game) Layout(outsideW, outsideH int) (int, int) {

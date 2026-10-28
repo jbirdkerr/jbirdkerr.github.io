@@ -13,6 +13,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
+	"github.com/jbirdkerr/jbirdkerr.github.io/apps/digdog/internal/board"
 )
 
 const (
@@ -66,12 +67,14 @@ type Game struct {
 	anims   map[string]*Animation
 	current string
 
-	board      *Board
+	board      *board.Board
 	dogX, dogY float64 // centre of the dog sprite
 	facing     float64 // 1 = right, -1 = left
 	target     int     // card index the dog is heading for or digging at
 	walking    bool
 	digging    bool
+
+	particles Particles
 }
 
 func newGame() (*Game, error) {
@@ -95,10 +98,11 @@ func newGame() (*Game, error) {
 }
 
 func (g *Game) reset() {
-	g.board = NewBoard(4, 3)
+	g.board = board.NewBoard(4, 3)
 	g.dogX, g.dogY = screenW/2, screenH-18
 	g.facing = 1
 	g.walking, g.digging = false, false
+	g.particles = g.particles[:0]
 	g.play("idle")
 }
 
@@ -124,12 +128,27 @@ func (g *Game) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyR) {
 		g.reset()
 	}
+	if g.board.Won {
+		if _, _, ok := pointerPos(); ok {
+			g.reset()
+			return nil
+		}
+	}
 	g.board.Update()
+	g.particles.Update()
+
+	// Spawn dirt particles while the dog is digging.
+	if g.digging {
+		px, py := cellCenter(g.board, g.target)
+		py += 6 // just below the mound
+		g.particles.Spawn(px, py)
+		g.particles.Spawn(px, py)
+	}
 
 	// Only accept a new pick while the dog is free.
 	if !g.walking && !g.digging {
 		if x, y, ok := pointerPos(); ok {
-			if i := g.board.CellAt(x, y); g.board.Pick(i) {
+			if i := cellAt(g.board, x, y); g.board.Pick(i) {
 				g.target = i
 				g.walking = true
 			}
@@ -155,7 +174,7 @@ func (g *Game) Update() error {
 
 // walk moves the dog toward the target mound and starts digging on arrival.
 func (g *Game) walk() {
-	cx, cy := g.board.CellCenter(g.target)
+	cx, cy := cellCenter(g.board, g.target)
 	tx, ty := cx, cy+16 // stand just below the mound so the card stays visible
 	dx, dy := tx-g.dogX, ty-g.dogY
 	dist := math.Hypot(dx, dy)
@@ -174,11 +193,11 @@ func (g *Game) walk() {
 	}
 }
 
-func (g *Game) afterReveal(r Result) {
+func (g *Game) afterReveal(r board.Result) {
 	switch r {
-	case ResultMatch, ResultWin:
+	case board.ResultMatch, board.ResultWin:
 		g.play("happy")
-	case ResultMiss:
+	case board.ResultMiss:
 		g.play("sad")
 	default:
 		g.play("idle")
@@ -187,7 +206,8 @@ func (g *Game) afterReveal(r Result) {
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	screen.Fill(color.RGBA{R: 0x1a, G: 0x12, B: 0x0c, A: 0xff})
-	g.board.Draw(screen)
+	drawBoard(screen, g.board)
+	g.particles.Draw(screen)
 
 	op := &ebiten.DrawImageOptions{}
 	op.Filter = ebiten.FilterNearest
@@ -200,7 +220,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	msg := fmt.Sprintf("moves: %d", g.board.Moves)
 	if g.board.Won {
-		msg = fmt.Sprintf("all matched in %d moves! press R", g.board.Moves)
+		msg = fmt.Sprintf("all matched in %d moves! tap or click to play again", g.board.Moves)
 	}
 	ebitenutil.DebugPrintAt(screen, msg, 4, 2)
 }

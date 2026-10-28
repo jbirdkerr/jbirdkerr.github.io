@@ -1,5 +1,5 @@
-# Create with:  ollama create qwen2.5-coder-agent -f Modelfile
-FROM qwen2.5-coder:14b-instruct-q4_K_M
+# Create with:  ollama create qwen3-coder-agent -f Modelfile
+FROM qwen3:8b
 
 # Room for the system prompt, AGENTS.md, and file reads.
 PARAMETER num_ctx 16384

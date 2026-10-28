@@ -8,13 +8,13 @@ draft: true
 
 Henry already has a subdomain. It is a canvas thing where you can boop his snoot and make him sneeze. I built it because I had a good photo, WebAudio turned out to be fun to synthesize sounds with, and it felt right that a personal site should have something interactive on it.
 
-That project runs on vanilla JavaScript. It works, but it tops out at "one dog, one trick." A few weeks ago I started wondering what it would take to put Henry in a game—something with actual rules, a win condition, and the possibility of a losing move. That turned into DigDog.
+That project runs on vanilla JavaScript. It works, but it tops out at "one dog, one trick." A few weeks ago I started wondering what it would take to make Henry the star of his own game. Something with actual rules, a win condition, and the possibility of a losing move. That turned into DigDog.
 
 ## Why WebAssembly
 
 The short answer: I wanted to write it in Go.
 
-The longer answer: I have been writing a lot of Go lately and I like how it thinks. It has a real type system, fast compile times, and a standard library that doesn't surprise you. For a small game loop—update state sixty times a second, draw whatever changed—Go with [Ebitengine](https://ebitengine.org) is a very comfortable fit. Ebitengine handles the game loop, input, and rendering, and it compiles to WebAssembly with a single environment variable change:
+The longer answer: I have been trying to stretch my "Go muscles" lately and I like how it thinks. It has a real type system, fast compile times, and a standard library that doesn't surprise you. For a small game loop Go with [Ebitengine](https://ebitengine.org) felt like a very comfortable fit. Ebitengine handles the game loop, input, and rendering, and it compiles to WebAssembly with a single environment variable change:
 
 ```bash
 GOOS=js GOARCH=wasm go build -o web/digdog.wasm .
@@ -28,11 +28,9 @@ One thing worth knowing: `wasm_exec.js` must come from *the same Go version that
 
 It is a memory card-matching game. There is a 4×3 grid of dirt mounds. Click or tap a mound (or navigate with the keyboard) and Henry walks over, digs it up, and reveals the card underneath. Dig up a matching pair and they clear. Dig up a mismatch and both get re-buried after a short pause. Match all six pairs and you win.
 
-The twist is the dog. Henry does not just pop cards up—he physically walks to the mound, plays a digging animation while dirt particles fly, then plays a happy or sad reaction depending on whether the cards matched. It adds maybe four seconds to each turn. I thought it would be annoying. It is not. It gives you a moment to actually think, and watching him droop after a miss is funnier than I expected.
+The twist is the dog. Henry does not just pop cards up—he physically walks to the mound, plays a digging animation while dirt particles fly, then plays a happy or sad reaction depending on whether the cards matched. It adds maybe four seconds to each turn. I thought it would be annoying. It is not. It is adorable. And itt gives you a moment to actually think. Additionally, watching him droop after a miss is funnier than I expected.
 
 ## The Parts I Actually Struggled With
-
-**The sprite.** I do not have real pixel art for Henry yet—I have his reference photos but I have not sat down with LibreSprite to trace them. What ships right now is a procedurally generated placeholder: a small Go program writes a 128×160 PNG with five rows of 32×32 frames, one animation per row. The palette is cinnamon reds and auburns. The ears flop. The tail wags. It is recognizably a red poodle and not recognizably Henry. I will fix that.
 
 **The audio.** Browsers refuse to start an audio context until the user has interacted with the page. That is the right policy—no one wants a website that beeps at you on load—but it means you cannot initialize your audio system in `newGame()`. The solution is lazy initialization: the first click or keypress triggers `audio.NewContext(44100)` and the audio context lives from there. On Linux without ALSA or PulseAudio devices present (my development machine has no sound card in the environment where I was testing), the game detects the missing hardware and silently disables audio rather than crashing.
 
@@ -53,9 +51,9 @@ The game is entirely static. No server, no database, no analytics. The binary is
 
 The game works. You can play a full round, win, lose moves to mismatches, and restart. But there is a gap between "works" and "finished":
 
-- **Real sprites.** Henry in pixel art, based on actual reference photos. This is the thing I most want to do and the thing that requires the most time.
 - **Levels.** Right now it is always 4×3. The plan is to grow the board each round—4×3, then 4×4, then 5×4—so a session has a natural arc.
 - **The sniff power-up** is wired up but I have not decided on the cost. One use means one fewer dig on the current board? A limited pool that does not refill? It needs playtesting.
 - **Keyboard navigation** is fully implemented (arrow keys move a focus cursor, Space or Enter digs), which matters to me because this site tries to be accessible to everyone, not just people with a mouse.
+- **Stats.** I have the `metrics-worker` just sitting there looking pretty. I'm sure I could add trackable stats to the game once we have auth implemented across the site.
 
-The code lives at [`apps/digdog/`](https://github.com/jbirdkerr/jbirdkerr.github.io/tree/main/apps/digdog) in the same monorepo as the blog and the snoot booper. Henry's subdomain empire continues to expand.
+The code lives at [`apps/digdog/`](https://github.com/jbirdkerr/jbirdkerr.github.io/tree/main/apps/digdog) in the same monorepo as the blog and the snoot booper. Hank the Poodle Dog's empire continues to expand!

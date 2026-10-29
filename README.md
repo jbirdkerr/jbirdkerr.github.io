@@ -8,7 +8,7 @@ This repository contains the Astro personal site at [jbirdkerr.net](https://jbir
 | --- | --- | --- | --- |
 | Personal site and blog | [`blog/`](blog/) | Astro blog, about page, and project index | GitHub Pages at `jbirdkerr.net` |
 | Boopmaster 3000 | [`apps/boopmaster/`](apps/boopmaster/) | Interactive Henry photo with eye effects, snoot boops, party mode, and a metrics panel | Cloudflare Pages at `boopmaster3000.jbirdkerr.net` |
-| DigDog | [`apps/digdog/`](apps/digdog/) | Go and Ebitengine card-matching game compiled to WebAssembly | Cloudflare Pages at `digdog.jbirdkerr.net`; separate workflow |
+| DigDog | [`apps/digdog/`](apps/digdog/) | Go and Ebitengine card-matching game compiled to WebAssembly | Cloudflare Pages at `digdog.jbirdkerr.net`; main workflow |
 | Metrics worker | [`apps/metrics-worker/`](apps/metrics-worker/) | Python Cloudflare Worker that proxies PostHog traffic and serves Supabase-backed metrics | `metrics-api.jbirdkerr.net` |
 | Metrics database | [`db/supabase/`](db/supabase/) | Supabase configuration and PostgreSQL migrations for site metrics | Used by the metrics worker |
 | URL shortener | [`apps/url-shortener/SPEC.md`](apps/url-shortener/SPEC.md) | Design specification; the service is not implemented or in the active deployment workflow | Planned |
@@ -66,9 +66,8 @@ The metrics-worker tests are also run by the repository's pre-commit and CI work
 
 ## CI and deployments
 
-- [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) validates pull requests and pushes targeting `main`. Its production deploy job runs on pushes to `main` and manual dispatch, detects affected units, and handles database migrations, Boopmaster, the metrics worker, and the blog.
-- [`.github/workflows/digdog.yml`](.github/workflows/digdog.yml) separately checks DigDog changes and deploys the game from `main` to Cloudflare Pages.
-- [`deploy/units.toml`](deploy/units.toml) and [`scripts/detect_changed_units.py`](scripts/detect_changed_units.py) describe how the main workflow maps changed paths to affected units. Check the workflows too: DigDog uses its own workflow.
+- [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) validates pull requests and pushes targeting `main`, including DigDog's Go tests and WebAssembly build. Its production deploy job runs on pushes to `main` and manual dispatch, detects affected units, and handles database migrations, Boopmaster, DigDog, the metrics worker, and the blog.
+- [`deploy/units.toml`](deploy/units.toml) and [`scripts/detect_changed_units.py`](scripts/detect_changed_units.py) map changed paths to affected units. DigDog's production deploy is gated by its `digdog` output from that detector; the Go/WASM validation runs on every workflow run.
 - The URL shortener is still a specification, not a deployed service.
 
 Production deployments and database migrations run through GitHub Actions. Do not run a manual production deploy or migration unless explicitly requested. Never commit `.env` files, tokens, service-role keys, or other credentials.

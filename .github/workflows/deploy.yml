@@ -58,6 +58,46 @@ jobs:
           ./pants --version
           ./pants test ::
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "apps/digdog/go.mod"
+          cache-dependency-path: "apps/digdog/go.sum"
+
+      - name: Run DigDog Go vet (native)
+        working-directory: apps/digdog
+        run: go vet ./internal/board/...
+
+      - name: Run DigDog Go tests
+        working-directory: apps/digdog
+        run: go test -v ./internal/board/...
+
+      - name: Build DigDog WebAssembly
+        working-directory: apps/digdog
+        run: |
+          GOOS=js GOARCH=wasm go vet ./...
+          GOOS=js GOARCH=wasm go build -o web/digdog.wasm .
+
+          # Copy matching wasm_exec.js from Go root
+          GOROOT="$(go env GOROOT)"
+          if [ -f "$GOROOT/lib/wasm/wasm_exec.js" ]; then
+            cp "$GOROOT/lib/wasm/wasm_exec.js" web/
+          elif [ -f "$GOROOT/misc/wasm/wasm_exec.js" ]; then
+            cp "$GOROOT/misc/wasm/wasm_exec.js" web/
+          else
+            echo "Error: wasm_exec.js not found in $GOROOT"
+            exit 1
+          fi
+
+      - name: Upload DigDog site artifact
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: actions/upload-artifact@v4
+        with:
+          name: digdog-web
+          path: apps/digdog/web/
+          if-no-files-found: error
+          retention-days: 1
+
   deploy:
     name: Deploy Affected Units
     needs: validate
@@ -144,7 +184,30 @@ jobs:
           fi
 
       # -------------------------------------------------------------
-      # 4. Blog (GitHub Pages)
+      # 4. DigDog (Cloudflare Pages)
+      # -------------------------------------------------------------
+      - name: Download DigDog site artifact
+        if: steps.detect.outputs.digdog == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: digdog-web
+          path: apps/digdog/web
+
+      - name: Deploy DigDog to Cloudflare Pages
+        if: steps.detect.outputs.digdog == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "Deploying DigDog to Cloudflare Pages..."
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            npx wrangler pages deploy apps/digdog/web --project-name digdog --branch main
+          else
+            echo "CLOUDFLARE_API_TOKEN not set; skipping DigDog Pages deploy."
+          fi
+
+      # -------------------------------------------------------------
+      # 5. Blog (GitHub Pages)
       # -------------------------------------------------------------
       - name: Build Blog
         if: steps.detect.outputs.blog == 'true'
@@ -169,7 +232,7 @@ jobs:
         uses: actions/deploy-pages@v4
 
       # -------------------------------------------------------------
-      # 5. Smoke Tests
+      # 6. Smoke Tests
       # -------------------------------------------------------------
       - name: Post-deploy Smoke Tests
         if: steps.detect.outputs.any_changed == 'true'
